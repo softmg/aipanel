@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "aipanel",
+  "project_id": "b12c2027-9955-4f1d-b03d-351255b90276"
+}
