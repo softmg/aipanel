@@ -5,23 +5,32 @@ import type { BeadTask, BeadTaskDetail } from "@/lib/sources/beads/types";
 
 const execFileAsync = promisify(execFile);
 
+const BEADS_LIST_TTL_MS = 3_000;
+type CachedBeads = { promise: Promise<BeadTask[]>; createdAt: number };
+const beadsListCache = new Map<string, CachedBeads>();
+
 export async function runBeadsList(projectPath: string): Promise<BeadTask[]> {
-  try {
-    const { stdout } = await execFileAsync("bd", ["list", "--all", "--format", "json"], {
-      cwd: path.resolve(projectPath),
-      timeout: 5000,
-      maxBuffer: 1024 * 1024,
-    });
+  const resolvedPath = path.resolve(projectPath);
+  const cached = beadsListCache.get(resolvedPath);
+  const now = Date.now();
 
-    const parsed = JSON.parse(stdout);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed as BeadTask[];
-  } catch {
-    return [];
+  if (cached && now - cached.createdAt < BEADS_LIST_TTL_MS) {
+    return cached.promise;
   }
+
+  const promise = execFileAsync("bd", ["list", "--all", "--format", "json"], {
+    cwd: resolvedPath,
+    timeout: 5000,
+    maxBuffer: 1024 * 1024,
+  })
+    .then(({ stdout }) => {
+      const parsed = JSON.parse(stdout);
+      return Array.isArray(parsed) ? (parsed as BeadTask[]) : [];
+    })
+    .catch(() => [] as BeadTask[]);
+
+  beadsListCache.set(resolvedPath, { promise, createdAt: now });
+  return promise;
 }
 
 const taskIdPattern = /^[a-z0-9][a-z0-9_-]*$/i;
