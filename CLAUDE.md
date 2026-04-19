@@ -52,18 +52,27 @@ bd close <id>         # Complete work
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+pnpm install
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+pnpm dev
 ```
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+- Next.js App Router UI with server-rendered pages and client-only interactive controls.
+- `lib/config` loads and validates `projects.json`.
+- `lib/sources/*` reads data from Claude JSONL logs, claude-mem SQLite, and beads CLI.
+- `lib/services/aggregator.ts` merges all source data into project cards and project detail DTOs.
+- `app/api/*` exposes read-only endpoints for projects and cache refresh.
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- Keep source adapters read-only and return empty arrays on source unavailability.
+- Surface partial source failures through `warnings` in aggregated project detail.
+- Validate route params with zod in API handlers.
+- Use `@/...` imports and strict TypeScript types.
+- Store reusable conventions in `.conventions/` and keep them updated with new features.

@@ -1,0 +1,37 @@
+import type { BeadTask } from "@/lib/sources/beads/types";
+import type { ClaudeMemSummary } from "@/lib/sources/claude-mem/types";
+import type { ClaudeSessionSummary } from "@/lib/sources/claude-code/types";
+
+export type ProjectCard = {
+  slug: string;
+  name: string;
+  absolutePath: string;
+  lastActivityAt: string | null;
+  sessionCount: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  beadsCounts: {
+    open: number;
+    in_progress: number;
+    blocked: number;
+    closed: number;
+    other: number;
+  };
+};
+
+export type ProjectDetail = {
+  project: {
+    slug: string;
+    name: string;
+    absolutePath: string;
+  };
+  sessions: Array<
+    ClaudeSessionSummary & {
+      title?: string;
+      summary?: ClaudeMemSummary | null;
+    }
+  >;
+  beads: BeadTask[];
+  warnings: string[];
+};

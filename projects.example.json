@@ -1,0 +1,14 @@
+{
+  "projects": [
+    {
+      "path": "/Users/fenix007/projects/ai/aipanel",
+      "name": "aipanel",
+      "enabled": true
+    },
+    {
+      "path": "/Users/fenix007/projects/ai/ai-roter2",
+      "name": "ai-roter2",
+      "enabled": true
+    }
+  ]
+}
