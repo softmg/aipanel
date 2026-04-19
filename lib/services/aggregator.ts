@@ -1,5 +1,6 @@
 import { loadProjectsConfig } from "@/lib/config/loader";
-import { listTasksForProject } from "@/lib/sources/beads";
+import { getTaskDetailForProject, listTasksForProject } from "@/lib/sources/beads";
+import type { BeadTaskDetail } from "@/lib/sources/beads/types";
 import { getSessionSummary, listSessionsForProject as listMemSessions } from "@/lib/sources/claude-mem";
 import { clearClaudeCodeCache, listSessionsForProject as listClaudeSessions } from "@/lib/sources/claude-code";
 import type { ProjectCard, ProjectDetail } from "@/lib/services/types";
@@ -116,6 +117,16 @@ export async function getProjectDetail(slug: string): Promise<ProjectDetail | nu
 
   cache.set(slug, { createdAt: now, detail });
   return detail;
+}
+
+export async function getTaskDetail(slug: string, taskId: string): Promise<BeadTaskDetail | null> {
+  const projects = await loadProjectsConfig();
+  const project = projects.find((item) => item.slug === slug);
+  if (!project) {
+    return null;
+  }
+
+  return getTaskDetailForProject(project.absolutePath, taskId);
 }
 
 export function clearAggregatorCache(): void {

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { formatNumber, formatRelative } from "@/lib/format";
 import type { ProjectDetail as ProjectDetailData } from "@/lib/services/types";
+import { TaskDetailDrawer } from "@/components/projects/TaskDetailDrawer";
 
 type Props = {
   data: ProjectDetailData;
@@ -18,6 +19,7 @@ const tabButtonBaseClass =
 
 export function ProjectDetail({ data }: Props) {
   const [tab, setTab] = useState<"sessions" | "tasks">("sessions");
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
     return {
@@ -145,7 +147,13 @@ export function ProjectDetail({ data }: Props) {
                         </div>
                       ) : (
                         tasks.map((task) => (
-                          <article key={task.id} className="rounded border border-zinc-200 p-2 dark:border-zinc-700">
+                          <button
+                            key={task.id}
+                            type="button"
+                            onClick={() => setActiveTaskId(task.id)}
+                            aria-label={`Open details for ${task.id}: ${task.title}`}
+                            className="w-full rounded border border-zinc-200 p-2 text-left transition-colors hover:border-zinc-400 hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 dark:hover:border-zinc-500 dark:hover:bg-zinc-900"
+                          >
                             <p className="text-xs text-zinc-500">{task.id}</p>
                             <p className="line-clamp-2 text-sm font-medium">{task.title}</p>
                             <div className="mt-1 flex gap-1 text-[10px] text-zinc-500">
@@ -154,7 +162,7 @@ export function ProjectDetail({ data }: Props) {
                                 <span className="rounded bg-zinc-100 px-1 dark:bg-zinc-800">P{task.priority}</span>
                               ) : null}
                             </div>
-                          </article>
+                          </button>
                         ))
                       )}
                     </div>
@@ -165,6 +173,12 @@ export function ProjectDetail({ data }: Props) {
           </section>
         )}
       </main>
+
+      <TaskDetailDrawer
+        slug={data.project.slug}
+        taskId={activeTaskId}
+        onClose={() => setActiveTaskId(null)}
+      />
     </div>
   );
 }
