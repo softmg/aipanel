@@ -37,8 +37,8 @@ describe("loadProjectsConfig", () => {
         projects: [
           { name: "Demo", path: "/tmp/alpha" },
           { name: "Demo", path: "/tmp/beta" },
-          { name: "Demo", path: "/tmp/alpha" },
-          { name: "Demo", path: "/tmp/alpha" },
+          { name: "Demo", path: "/tmp/gamma" },
+          { name: "Demo", path: "/tmp/delta" },
         ],
       }),
       async () => {
@@ -48,9 +48,22 @@ describe("loadProjectsConfig", () => {
         expect(new Set(projects.map((project) => project.slug)).size).toBe(4);
         expect(projects[0]?.slug).toBe("demo");
         expect(projects[1]?.slug).toBe("demo-beta");
-        expect(projects[2]?.slug).toMatch(/^demo-[a-z0-9]{1,6}$/);
-        expect(projects[3]?.slug).toMatch(/^demo-[a-z0-9]{1,6}(?:-[0-9]+)?$/);
-        expect(projects[2]?.slug).not.toBe(projects[3]?.slug);
+      },
+    );
+  });
+
+  it("deduplicates entries with the same resolved path", async () => {
+    await withTempConfig(
+      JSON.stringify({
+        projects: [
+          { name: "First", path: "/tmp/shared" },
+          { name: "Second", path: "/tmp/shared" },
+        ],
+      }),
+      async () => {
+        const projects = await loadProjectsConfig();
+        expect(projects).toHaveLength(1);
+        expect(projects[0]?.name).toBe("First");
       },
     );
   });

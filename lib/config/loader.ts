@@ -80,16 +80,23 @@ export async function loadProjectsConfig(): Promise<ProjectConfig[]> {
   const parsed = appConfigSchema.parse(JSON.parse(raw));
   const usedSlugs = new Set<string>();
 
+  const seenPaths = new Set<string>();
+
   return parsed.projects
     .filter((project) => project.enabled !== false)
-    .map((project) => {
+    .reduce<ProjectConfig[]>((acc, project) => {
       const absolutePath = normalizePath(project.path);
+      if (seenPaths.has(absolutePath)) {
+        return acc;
+      }
+      seenPaths.add(absolutePath);
       const inferredName = project.name ?? path.basename(absolutePath);
-      return {
+      acc.push({
         name: inferredName,
         absolutePath,
         slug: toUniqueSlug(inferredName, absolutePath, usedSlugs),
         encodedPath: toEncodedPath(absolutePath),
-      };
-    });
+      });
+      return acc;
+    }, []);
 }

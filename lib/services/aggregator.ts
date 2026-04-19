@@ -5,7 +5,13 @@ import { getSessionSummary, listSessionsForProject as listMemSessions } from "@/
 import { clearClaudeCodeCache, listSessionsForProject as listClaudeSessions } from "@/lib/sources/claude-code";
 import type { ProjectCard, ProjectDetail } from "@/lib/services/types";
 
-const cache = new Map<string, { createdAt: number; detail: ProjectDetail }>();
+type CachedSessions = {
+  createdAt: number;
+  sessions: ProjectDetail["sessions"];
+  sessionWarnings: string[];
+};
+
+const sessionCache = new Map<string, CachedSessions>();
 const CACHE_TTL_MS = 30_000;
 
 function countBeads(tasks: Array<{ status: string }>) {
@@ -60,32 +66,24 @@ export async function getProjectCards(): Promise<ProjectCard[]> {
   return cards.sort((left, right) => left.name.localeCompare(right.name));
 }
 
-export async function getProjectDetail(slug: string): Promise<ProjectDetail | null> {
-  const cached = cache.get(slug);
+async function getSessionsForProject(
+  project: { absolutePath: string; slug: string },
+): Promise<{ sessions: ProjectDetail["sessions"]; sessionWarnings: string[] }> {
+  const cached = sessionCache.get(project.slug);
   const now = Date.now();
   if (cached && now - cached.createdAt < CACHE_TTL_MS) {
-    return cached.detail;
+    return { sessions: cached.sessions, sessionWarnings: cached.sessionWarnings };
   }
 
-  const projects = await loadProjectsConfig();
-  const project = projects.find((item) => item.slug === slug);
-  if (!project) {
-    return null;
-  }
+  const sessionWarnings: string[] = [];
 
-  const warnings: string[] = [];
-
-  const [claudeSessions, memSessions, beads] = await Promise.all([
+  const [claudeSessions, memSessions] = await Promise.all([
     listClaudeSessions(project.absolutePath).catch(() => {
-      warnings.push("claude-code source unavailable");
+      sessionWarnings.push("claude-code source unavailable");
       return [];
     }),
     listMemSessions(project.absolutePath).catch(() => {
-      warnings.push("claude-mem source unavailable");
-      return [];
-    }),
-    listTasksForProject(project.absolutePath).catch(() => {
-      warnings.push("beads source unavailable");
+      sessionWarnings.push("claude-mem source unavailable");
       return [];
     }),
   ]);
@@ -104,19 +102,37 @@ export async function getProjectDetail(slug: string): Promise<ProjectDetail | nu
     }),
   );
 
-  const detail: ProjectDetail = {
+  sessionCache.set(project.slug, { createdAt: now, sessions, sessionWarnings });
+  return { sessions, sessionWarnings };
+}
+
+export async function getProjectDetail(slug: string): Promise<ProjectDetail | null> {
+  const projects = await loadProjectsConfig();
+  const project = projects.find((item) => item.slug === slug);
+  if (!project) {
+    return null;
+  }
+
+  const [{ sessions, sessionWarnings }, beads] = await Promise.all([
+    getSessionsForProject(project),
+    listTasksForProject(project.absolutePath).catch(() => null),
+  ]);
+
+  const warnings = [...sessionWarnings];
+  if (beads === null) {
+    warnings.push("beads source unavailable");
+  }
+
+  return {
     project: {
       slug: project.slug,
       name: project.name,
       absolutePath: project.absolutePath,
     },
     sessions,
-    beads,
+    beads: beads ?? [],
     warnings,
   };
-
-  cache.set(slug, { createdAt: now, detail });
-  return detail;
 }
 
 export async function getTaskDetail(slug: string, taskId: string): Promise<BeadTaskDetail | null> {
@@ -130,6 +146,6 @@ export async function getTaskDetail(slug: string, taskId: string): Promise<BeadT
 }
 
 export function clearAggregatorCache(): void {
-  cache.clear();
+  sessionCache.clear();
   clearClaudeCodeCache();
 }
