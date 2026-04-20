@@ -139,6 +139,12 @@ export async function getProjectDetail(slug: string): Promise<ProjectDetail | nu
     listNotificationsForProject(project.absolutePath).catch(() => []),
   ]);
 
+  const notificationsWithProject = notifications.map((notification) => ({
+    ...notification,
+    projectSlug: project.slug,
+    projectLabel: project.name,
+  }));
+
   const warnings = [...sessionWarnings];
   if (beads === null) {
     warnings.push("beads source unavailable");
@@ -152,7 +158,7 @@ export async function getProjectDetail(slug: string): Promise<ProjectDetail | nu
     },
     sessions,
     beads: beads ?? [],
-    notifications,
+    notifications: notificationsWithProject,
     warnings,
   };
 }
@@ -192,7 +198,12 @@ export async function getProjectNotifications(slug: string) {
     return [];
   }
 
-  return listNotificationsForProject(project.absolutePath);
+  const notifications = await listNotificationsForProject(project.absolutePath);
+  return notifications.map((notification) => ({
+    ...notification,
+    projectSlug: project.slug,
+    projectLabel: project.name,
+  }));
 }
 
 export function clearAggregatorCache(): void {

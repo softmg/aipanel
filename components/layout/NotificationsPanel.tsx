@@ -71,7 +71,7 @@ export function NotificationsPanel({ notifications }: Props) {
                   <p className="mt-1 text-xs text-zinc-500 break-words">{notification.details}</p>
                 ) : null}
                 <div className="mt-2 rounded bg-zinc-100 px-2 py-1 text-[11px] text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
-                  Session: {notification.sessionLabel}
+                  Project: {notification.projectLabel ?? notification.projectSlug ?? "—"} · Session: {notification.sessionLabel}
                 </div>
               </article>
             ))}

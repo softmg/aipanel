@@ -23,6 +23,8 @@ export type ClaudeNotification = {
   id: string;
   sessionId: string;
   sessionLabel: string;
+  projectSlug?: string;
+  projectLabel?: string;
   createdAt: string;
   kind: ClaudeNotificationKind;
   title: string;

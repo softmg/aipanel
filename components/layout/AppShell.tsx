@@ -12,6 +12,8 @@ type NotificationItem = {
   id: string;
   sessionId: string;
   sessionLabel: string;
+  projectSlug?: string;
+  projectLabel?: string;
   createdAt: string;
   kind: "question" | "permission" | "task";
   title: string;

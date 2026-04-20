@@ -22,7 +22,7 @@ export default async function ProjectPage({ params }: Props) {
 
   return (
     <AppShell projects={projects} activeSlug={slug} notifications={notifications}>
-      <ProjectDetail data={detail} />
+      <ProjectDetail key={detail.project.slug} data={detail} />
     </AppShell>
   );
 }
