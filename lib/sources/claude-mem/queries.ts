@@ -142,6 +142,23 @@ export function listObservationsForSession(memorySessionId: string): ClaudeMemOb
   return rows.map(mapObservation);
 }
 
+export function sessionBelongsToProject(projectPath: string, memorySessionId: string): boolean {
+  const db = getClaudeMemDb();
+  if (!db) {
+    return false;
+  }
+
+  const mode = detectMatchingMode(projectPath);
+  matchingMode = mode;
+  const value = mode === "exact" ? projectPath : path.basename(projectPath);
+
+  const row = db
+    .prepare("SELECT 1 as found FROM sdk_sessions WHERE project = ? AND memory_session_id = ? LIMIT 1")
+    .get(value, memorySessionId) as { found: number } | undefined;
+
+  return Boolean(row?.found);
+}
+
 export function getProjectMatchingMode(): ProjectMatchingMode {
   return matchingMode;
 }

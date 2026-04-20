@@ -9,6 +9,7 @@ import {
   getClaudeMemSummary,
   listClaudeMemSessions,
   listObservationsForSession,
+  sessionBelongsToProject,
 } from "@/lib/sources/claude-mem/queries";
 
 export type { ClaudeMemObservation, ClaudeMemSession, ClaudeMemSummary, ProjectMatchingMode };
@@ -23,6 +24,10 @@ export async function getSessionSummary(memorySessionId: string): Promise<Claude
 
 export async function getSessionObservations(memorySessionId: string): Promise<ClaudeMemObservation[]> {
   return listObservationsForSession(memorySessionId);
+}
+
+export async function isSessionInProject(projectPath: string, memorySessionId: string): Promise<boolean> {
+  return sessionBelongsToProject(projectPath, memorySessionId);
 }
 
 export async function getMatchingMode(projectPath: string): Promise<ProjectMatchingMode> {
