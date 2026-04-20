@@ -1,6 +1,6 @@
 import type { BeadTask } from "@/lib/sources/beads/types";
+import type { ClaudeNotification, ClaudeSessionSummary } from "@/lib/sources/claude-code/types";
 import type { ClaudeMemSummary } from "@/lib/sources/claude-mem/types";
-import type { ClaudeSessionSummary } from "@/lib/sources/claude-code/types";
 
 export type ProjectCard = {
   slug: string;
@@ -34,5 +34,6 @@ export type ProjectDetail = {
     }
   >;
   beads: BeadTask[];
+  notifications: ClaudeNotification[];
   warnings: string[];
 };

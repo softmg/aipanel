@@ -1,8 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { clearClaudeCodeNotificationCache, listNotificationsForProject } from "@/lib/sources/claude-code/notifications";
 import { getClaudeProjectDir } from "@/lib/sources/claude-code/paths";
 import { clearClaudeCodeCache, parseSessionFile } from "@/lib/sources/claude-code/parser";
 import type { ClaudeSessionDetail, ClaudeSessionSummary } from "@/lib/sources/claude-code/types";
+
+export { clearClaudeCodeNotificationCache, listNotificationsForProject };
+export type { ClaudeNotification, ClaudeNotificationKind } from "@/lib/sources/claude-code/types";
 
 export async function listSessionsForProject(projectPath: string): Promise<ClaudeSessionSummary[]> {
   const projectDir = getClaudeProjectDir(projectPath);

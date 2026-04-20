@@ -7,7 +7,12 @@ import {
   isSessionInProject,
   listSessionsForProject as listMemSessions,
 } from "@/lib/sources/claude-mem";
-import { clearClaudeCodeCache, listSessionsForProject as listClaudeSessions } from "@/lib/sources/claude-code";
+import {
+  clearClaudeCodeCache,
+  clearClaudeCodeNotificationCache,
+  listNotificationsForProject,
+  listSessionsForProject as listClaudeSessions,
+} from "@/lib/sources/claude-code";
 import type { ProjectCard, ProjectDetail } from "@/lib/services/types";
 
 type CachedSessions = {
@@ -128,9 +133,10 @@ export async function getProjectDetail(slug: string): Promise<ProjectDetail | nu
     return null;
   }
 
-  const [{ sessions, sessionWarnings }, beads] = await Promise.all([
+  const [{ sessions, sessionWarnings }, beads, notifications] = await Promise.all([
     getSessionsForProject(project),
     listTasksForProject(project.absolutePath).catch(() => null),
+    listNotificationsForProject(project.absolutePath).catch(() => []),
   ]);
 
   const warnings = [...sessionWarnings];
@@ -146,6 +152,7 @@ export async function getProjectDetail(slug: string): Promise<ProjectDetail | nu
     },
     sessions,
     beads: beads ?? [],
+    notifications,
     warnings,
   };
 }
@@ -178,7 +185,18 @@ export async function getProjectSessionObservations(
   return getSessionObservations(memorySessionId);
 }
 
+export async function getProjectNotifications(slug: string) {
+  const projects = await loadProjectsConfig();
+  const project = projects.find((item) => item.slug === slug);
+  if (!project) {
+    return [];
+  }
+
+  return listNotificationsForProject(project.absolutePath);
+}
+
 export function clearAggregatorCache(): void {
   sessionCache.clear();
   clearClaudeCodeCache();
+  clearClaudeCodeNotificationCache();
 }
