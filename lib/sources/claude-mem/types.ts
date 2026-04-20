@@ -15,4 +15,18 @@ export type ClaudeMemSummary = {
   nextSteps: string | null;
 };
 
+export type ClaudeMemObservation = {
+  id: number;
+  type: string;
+  title: string | null;
+  subtitle: string | null;
+  narrative: string | null;
+  facts: string | null;
+  concepts: string | null;
+  filesRead: string | null;
+  filesModified: string | null;
+  promptNumber: number | null;
+  createdAt: string;
+};
+
 export type ProjectMatchingMode = "exact" | "basename";

@@ -30,6 +30,7 @@ export type ProjectDetail = {
     ClaudeSessionSummary & {
       title?: string;
       summary?: ClaudeMemSummary | null;
+      memorySessionId?: string | null;
     }
   >;
   beads: BeadTask[];

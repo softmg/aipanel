@@ -39,15 +39,17 @@ function latestIso(values: Array<string | null>): string | null {
   return new Date(Math.max(...valid)).toISOString();
 }
 
-export async function getProjectCards(): Promise<ProjectCard[]> {
+export async function getProjectCards(options: { includeBeads?: boolean } = {}): Promise<ProjectCard[]> {
+  const includeBeads = options.includeBeads ?? true;
   const projects = await loadProjectsConfig();
 
   const cards = await Promise.all(
     projects.map(async (project) => {
-      const [sessions, beads] = await Promise.all([
-        listClaudeSessions(project.absolutePath).catch(() => []),
-        listTasksForProject(project.absolutePath).catch(() => []),
-      ]);
+      const sessionsPromise = listClaudeSessions(project.absolutePath).catch(() => []);
+      const beadsPromise = includeBeads
+        ? listTasksForProject(project.absolutePath).catch(() => [] as Array<{ status: string }>)
+        : Promise.resolve([] as Array<{ status: string }>);
+      const [sessions, beads] = await Promise.all([sessionsPromise, beadsPromise]);
 
       return {
         slug: project.slug,
@@ -63,7 +65,14 @@ export async function getProjectCards(): Promise<ProjectCard[]> {
     }),
   );
 
-  return cards.sort((left, right) => left.name.localeCompare(right.name));
+  return cards.sort((left, right) => {
+    const leftTs = left.lastActivityAt ? new Date(left.lastActivityAt).valueOf() : -Infinity;
+    const rightTs = right.lastActivityAt ? new Date(right.lastActivityAt).valueOf() : -Infinity;
+    if (leftTs !== rightTs) {
+      return rightTs - leftTs;
+    }
+    return left.name.localeCompare(right.name);
+  });
 }
 
 async function getSessionsForProject(
@@ -98,6 +107,7 @@ async function getSessionsForProject(
         ...session,
         title: mem?.customTitle ?? mem?.userPrompt ?? undefined,
         summary,
+        memorySessionId: mem?.memorySessionId ?? null,
       };
     }),
   );

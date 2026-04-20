@@ -1,6 +1,11 @@
 import path from "node:path";
 import { getClaudeMemDb } from "@/lib/sources/claude-mem/client";
-import type { ClaudeMemSession, ClaudeMemSummary, ProjectMatchingMode } from "@/lib/sources/claude-mem/types";
+import type {
+  ClaudeMemObservation,
+  ClaudeMemSession,
+  ClaudeMemSummary,
+  ProjectMatchingMode,
+} from "@/lib/sources/claude-mem/types";
 
 type RawSession = {
   content_session_id: string;
@@ -17,6 +22,20 @@ type RawSummary = {
   learned: string | null;
   completed: string | null;
   next_steps: string | null;
+};
+
+type RawObservation = {
+  id: number;
+  type: string;
+  title: string | null;
+  subtitle: string | null;
+  narrative: string | null;
+  facts: string | null;
+  concepts: string | null;
+  files_read: string | null;
+  files_modified: string | null;
+  prompt_number: number | null;
+  created_at: string;
 };
 
 let matchingMode: ProjectMatchingMode = "basename";
@@ -90,6 +109,37 @@ export function getClaudeMemSummary(memorySessionId: string): ClaudeMemSummary |
     completed: row.completed,
     nextSteps: row.next_steps,
   };
+}
+
+function mapObservation(raw: RawObservation): ClaudeMemObservation {
+  return {
+    id: raw.id,
+    type: raw.type,
+    title: raw.title,
+    subtitle: raw.subtitle,
+    narrative: raw.narrative,
+    facts: raw.facts,
+    concepts: raw.concepts,
+    filesRead: raw.files_read,
+    filesModified: raw.files_modified,
+    promptNumber: raw.prompt_number,
+    createdAt: raw.created_at,
+  };
+}
+
+export function listObservationsForSession(memorySessionId: string): ClaudeMemObservation[] {
+  const db = getClaudeMemDb();
+  if (!db) {
+    return [];
+  }
+
+  const rows = db
+    .prepare(
+      "SELECT id, type, title, subtitle, narrative, facts, concepts, files_read, files_modified, prompt_number, created_at FROM observations WHERE memory_session_id = ? ORDER BY prompt_number ASC, id ASC",
+    )
+    .all(memorySessionId) as RawObservation[];
+
+  return rows.map(mapObservation);
 }
 
 export function getProjectMatchingMode(): ProjectMatchingMode {
