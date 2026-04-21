@@ -5,6 +5,13 @@ export type TokenUsage = {
   cacheCreationTokens: number;
 };
 
+export type ClaudeSubagentSummary = {
+  agentId: string;
+  agentName: string;
+  turns: number;
+  lastActivityAt: string | null;
+};
+
 export type ClaudeSessionSummary = {
   sessionId: string;
   startedAt: string | null;
@@ -13,6 +20,7 @@ export type ClaudeSessionSummary = {
   userPromptCount: number;
   assistantTurnCount: number;
   subagentCount: number;
+  subagents?: ClaudeSubagentSummary[];
 };
 
 export type ClaudeSessionDetail = ClaudeSessionSummary;

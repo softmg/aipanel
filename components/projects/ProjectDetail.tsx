@@ -377,6 +377,11 @@ export function ProjectDetail({ data }: Props) {
                                 </svg>
                               </button>
                               <p className="max-w-[320px] truncate">{session.title ?? session.sessionId}</p>
+                              {session.subagentCount > 0 ? (
+                                <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
+                                  Team {session.subagentCount}
+                                </span>
+                              ) : null}
                               {activeSessionId === session.sessionId ? (
                                 <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
                                   Active
@@ -425,6 +430,31 @@ export function ProjectDetail({ data }: Props) {
                                     Failed to load observations.
                                   </p>
                                 ) : null}
+
+                                {session.subagentCount > 0 ? (
+                                  <details className="rounded-lg border border-zinc-200 bg-white px-3 py-2 dark:border-zinc-800 dark:bg-zinc-950">
+                                    <summary className="cursor-pointer text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                                      Agent Team · {session.subagentCount}
+                                    </summary>
+                                    <div className="mt-2 space-y-1">
+                                      {(session.subagents ?? []).map((agent) => (
+                                        <div
+                                          key={agent.agentId}
+                                          className="flex items-center justify-between gap-3 rounded bg-zinc-50 px-2 py-1 text-xs dark:bg-zinc-900"
+                                        >
+                                          <span className="truncate font-mono text-zinc-600 dark:text-zinc-300">
+                                            @{agent.agentName}
+                                          </span>
+                                          <span className="shrink-0 text-zinc-500">
+                                            {agent.turns} turns · {formatRelative(agent.lastActivityAt)}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </details>
+                                ) : (
+                                  <p className="text-xs text-zinc-500">No Agent Team activity in this session.</p>
+                                )}
 
                                 {observationState?.status === "loaded" && groupedObservations.length === 0 ? (
                                   <p className="text-xs text-zinc-500">No observations recorded for this session.</p>
