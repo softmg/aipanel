@@ -38,7 +38,7 @@ export function ProjectSidebar({ projects, activeSlug }: Props) {
             >
               <div className="mb-1 flex items-center justify-between">
                 <p className="truncate text-sm font-semibold">{project.name}</p>
-                <p className="text-[11px] text-zinc-500">{formatRelative(project.lastActivityAt)}</p>
+                <p suppressHydrationWarning className="text-[11px] text-zinc-500">{formatRelative(project.lastActivityAt)}</p>
               </div>
 
               <p className="truncate text-[11px] text-zinc-500">{project.absolutePath}</p>

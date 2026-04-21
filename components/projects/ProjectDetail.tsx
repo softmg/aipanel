@@ -2,6 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { formatNumber, formatRelative } from "@/lib/format";
+import { AgentOffice } from "@/components/projects/AgentOffice";
 import { TaskDetailDrawer } from "@/components/projects/TaskDetailDrawer";
 import type { ClaudeMemObservation } from "@/lib/sources/claude-mem/types";
 import type { ClaudeSessionSummary } from "@/lib/sources/claude-code/types";
@@ -35,8 +36,10 @@ type ObservationDay = {
 };
 
 const sessionsTabId = "project-detail-tab-sessions";
+const officeTabId = "project-detail-tab-office";
 const tasksTabId = "project-detail-tab-tasks";
 const sessionsPanelId = "project-detail-panel-sessions";
+const officePanelId = "project-detail-panel-office";
 const tasksPanelId = "project-detail-panel-tasks";
 
 const tabButtonBaseClass =
@@ -182,7 +185,7 @@ function SessionTeamBadge({ session, active }: SessionTeamBadgeProps) {
                       {getActivityLabel(agentState)}
                     </span>
                   </div>
-                  <p className="mt-1 text-[11px] text-zinc-500">
+                  <p suppressHydrationWarning className="mt-1 text-[11px] text-zinc-500">
                     {formatNumber(agentTokens)} tokens · {agent.turns} turns · {formatRelative(agent.lastActivityAt)}
                   </p>
                 </div>
@@ -284,7 +287,7 @@ function groupObservations(items: ClaudeMemObservation[]): ObservationDay[] {
 }
 
 export function ProjectDetail({ data }: Props) {
-  const [tab, setTab] = useState<"sessions" | "tasks">("sessions");
+  const [tab, setTab] = useState<"sessions" | "office" | "tasks">("sessions");
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [visibleSessionsCount, setVisibleSessionsCount] = useState(INITIAL_VISIBLE_SESSIONS);
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
@@ -378,6 +381,21 @@ export function ProjectDetail({ data }: Props) {
           Sessions ({data.sessions.length})
         </button>
         <button
+          id={officeTabId}
+          type="button"
+          role="tab"
+          aria-selected={tab === "office"}
+          aria-controls={officePanelId}
+          onClick={() => setTab("office")}
+          className={`${tabButtonBaseClass} ${
+            tab === "office"
+              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+              : "hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          }`}
+        >
+          Office
+        </button>
+        <button
           id={tasksTabId}
           type="button"
           role="tab"
@@ -436,7 +454,7 @@ export function ProjectDetail({ data }: Props) {
                     return (
                       <Fragment key={session.sessionId}>
                         <tr className="border-t border-zinc-200 dark:border-zinc-800">
-                          <td className="px-3 py-2 text-xs text-zinc-500">
+                          <td suppressHydrationWarning className="px-3 py-2 text-xs text-zinc-500">
                             {formatRelative(session.lastActivityAt)}
                           </td>
                           <td className="px-3 py-2">
@@ -546,7 +564,7 @@ export function ProjectDetail({ data }: Props) {
                                           <span className="truncate font-mono text-zinc-600 dark:text-zinc-300">
                                             @{agent.agentName}
                                           </span>
-                                          <span className="shrink-0 text-right text-zinc-500">
+                                          <span suppressHydrationWarning className="shrink-0 text-right text-zinc-500">
                                             {formatNumber(
                                               agent.usage.inputTokens +
                                                 agent.usage.outputTokens +
@@ -616,6 +634,10 @@ export function ProjectDetail({ data }: Props) {
                 Загрузить ещё
               </button>
             ) : null}
+          </section>
+        ) : tab === "office" ? (
+          <section id={officePanelId} role="tabpanel" aria-labelledby={officeTabId}>
+            <AgentOffice data={data} activeSessionId={activeSessionId} />
           </section>
         ) : (
           <section id={tasksPanelId} role="tabpanel" aria-labelledby={tasksTabId}>
