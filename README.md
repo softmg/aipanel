@@ -2,19 +2,37 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Create local env file:
+
+```bash
+cp .env.example .env.local
+```
+
+Run the development server:
+
+```bash
+make dev
+```
+
+For one-off LAN launch, you can pass env directly to `make dev`:
+
+```bash
+AIPANEL_ALLOWED_DEV_ORIGINS=localhost,100.89.42.77 make dev
+```
+
+For persistent LAN setup, set allowed dev origins in `.env.local`:
+
+```bash
+AIPANEL_ALLOWED_DEV_ORIGINS=localhost,100.89.42.77
+```
+
+Open the app URL shown in terminal (for example `http://localhost:3000` or `http://100.89.42.77:3000`).
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
