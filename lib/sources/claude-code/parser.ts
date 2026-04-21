@@ -331,7 +331,6 @@ function asIso(value: string | undefined): string | null {
 }
 
 const MAX_TITLE_LENGTH = 120;
-const TITLE_REFRESH_SESSION_AGE_MS = 60_000;
 
 function collapseWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -350,7 +349,8 @@ function stripTitleNoise(value: string): string {
   return value
     .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, " ")
     .replace(/<local-command-caveat>[\s\S]*?<\/local-command-caveat>/gi, " ")
-    .replace(/<command-(?:name|message|args)>[\s\S]*?<\/command-(?:name|message|args)>/gi, " ")
+    .replace(/<command-args>([\s\S]*?)<\/command-args>/gi, " $1 ")
+    .replace(/<command-(?:name|message)>[\s\S]*?<\/command-(?:name|message)>/gi, " ")
     .replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/gi, " ")
     .replace(/\[Image #\d+\]/gi, " ");
 }
@@ -379,15 +379,6 @@ function parseTitleFromUserContent(content: NonNullable<RawEvent["message"]>["co
     .join(" ");
 
   return titleFromText(text);
-}
-
-function needsTitleRefresh(title: string | undefined, startedAt: string | null, now = Date.now()): boolean {
-  if (title || !startedAt) {
-    return false;
-  }
-
-  const startedAtMs = new Date(startedAt).valueOf();
-  return !Number.isNaN(startedAtMs) && now - startedAtMs > TITLE_REFRESH_SESSION_AGE_MS;
 }
 
 export async function parseSessionFile(filePath: string): Promise<ClaudeSessionSummary> {
@@ -463,7 +454,6 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
   const summary: ClaudeSessionSummary = {
     sessionId,
     title,
-    needsTitleRefresh: needsTitleRefresh(title, startedAt),
     startedAt,
     lastActivityAt: lastActivityAt ?? stat.mtime.toISOString(),
     usage: {

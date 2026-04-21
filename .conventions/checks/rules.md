@@ -16,4 +16,4 @@
 - Realtime read-only updates should prefer SSE over WebSocket unless the client must send messages over the same channel; browser listeners should debounce `router.refresh()` to avoid refresh storms.
 - Agent Team session details must display human-readable agent names when available and include per-agent token totals from subagent logs.
 - Compact Agent Team badges must preserve the `Team N` row label and expose agent names, token totals, and Active/Idle state on hover and keyboard focus.
-- Session title refresh controls must be explicit buttons with focus-visible styles and must disable when no session is eligible for refresh.
+- Session title refresh controls must be explicit buttons with focus-visible styles and must not render blank title cells when no source text exists.

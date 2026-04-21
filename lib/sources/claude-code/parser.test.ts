@@ -118,49 +118,28 @@ describe("claude-code parser", () => {
     }
   });
 
-  it("marks sessions older than one minute without title for title refresh", async () => {
+  it("uses slash command args as title content", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
-    const filePath = path.join(tempRoot, "session-needs-title-refresh.jsonl");
-    const oldTimestamp = new Date(Date.now() - 120_000).toISOString();
-
-    await fs.writeFile(
-      filePath,
-      JSON.stringify({
-        type: "assistant",
-        timestamp: oldTimestamp,
-        message: { usage: { input_tokens: 1 } },
-      }),
-      "utf8",
-    );
-
-    try {
-      const summary = await parseSessionFile(filePath);
-      expect(summary.title).toBeUndefined();
-      expect(summary.needsTitleRefresh).toBe(true);
-    } finally {
-      await fs.rm(tempRoot, { recursive: true, force: true });
-    }
-  });
-
-  it("does not mark titled sessions for title refresh", async () => {
-    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
-    const filePath = path.join(tempRoot, "session-has-title.jsonl");
-    const oldTimestamp = new Date(Date.now() - 120_000).toISOString();
+    const filePath = path.join(tempRoot, "session-slash-command-args.jsonl");
 
     await fs.writeFile(
       filePath,
       JSON.stringify({
         type: "user",
-        timestamp: oldTimestamp,
-        message: { content: "Investigate empty session titles" },
+        timestamp: "2026-04-21T10:00:00.000Z",
+        message: {
+          content:
+            "<command-name>/agent-teams-sm:team-feature</command-name>\n<command-message>agent-teams-sm:team-feature</command-message>\n<command-args>если сессия запущена больше 1 минуты и у неё нет название, добавить название сессии</command-args>",
+        },
       }),
       "utf8",
     );
 
     try {
       const summary = await parseSessionFile(filePath);
-      expect(summary.title).toBe("Investigate empty session titles");
-      expect(summary.needsTitleRefresh).toBe(false);
+      expect(summary.title).toContain("если сессия запущена больше 1 минуты");
+      expect(summary.title).not.toContain("command-name");
+      expect(summary.title).not.toContain("agent-teams-sm:team-feature");
     } finally {
       await fs.rm(tempRoot, { recursive: true, force: true });
     }

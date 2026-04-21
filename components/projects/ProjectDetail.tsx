@@ -310,7 +310,7 @@ export function ProjectDetail({ data }: Props) {
     [data.sessions, visibleSessionsCount],
   );
   const canLoadMoreSessions = visibleSessionsCount < data.sessions.length;
-  const sessionsNeedingTitleRefresh = data.sessions.filter((session) => session.needsTitleRefresh).length;
+  const sessionsWithEmptyTitles = data.sessions.filter((session) => !session.title?.trim()).length;
 
   const activeSessionId = useMemo(() => {
     return data.sessions.find((session) => session.lastActivityAt)?.sessionId ?? null;
@@ -369,8 +369,8 @@ export function ProjectDetail({ data }: Props) {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden">
-      <header className="border-b border-zinc-200 p-4 dark:border-zinc-800">
-        <h1 className="text-xl font-semibold">{data.project.name}</h1>
+      <header className="border-b border-zinc-200 p-4 pr-16 dark:border-zinc-800">
+        <h1 className="truncate text-xl font-semibold">{data.project.name}</h1>
         <p className="truncate text-xs text-zinc-500">{data.project.absolutePath}</p>
       </header>
 
@@ -446,14 +446,14 @@ export function ProjectDetail({ data }: Props) {
           <section id={sessionsPanelId} role="tabpanel" aria-labelledby={sessionsTabId}>
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-xs text-zinc-500">
-                {sessionsNeedingTitleRefresh > 0
-                  ? `${sessionsNeedingTitleRefresh} sessions can refresh empty titles`
-                  : "All eligible sessions have titles"}
+                {sessionsWithEmptyTitles > 0
+                  ? `${sessionsWithEmptyTitles} sessions still have no title source`
+                  : "All sessions have titles"}
               </p>
               <button
                 type="button"
                 onClick={refreshEmptyTitles}
-                disabled={refreshingTitles || sessionsNeedingTitleRefresh === 0}
+                disabled={refreshingTitles}
                 aria-label="Update empty session titles"
                 className="rounded border border-zinc-300 px-3 py-1.5 text-sm transition hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
               >
@@ -527,7 +527,7 @@ export function ProjectDetail({ data }: Props) {
                                   <rect x="3" y="7" width="10" height="10" rx="2" />
                                 </svg>
                               </button>
-                              <p className="max-w-[320px] truncate">{session.title ?? session.sessionId}</p>
+                              <p className="max-w-[320px] truncate">{session.title?.trim() || session.sessionId}</p>
                               {session.subagentCount > 0 ? (
                                 <SessionTeamBadge session={session} active={activeSessionId === session.sessionId} />
                               ) : null}

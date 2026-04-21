@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { NotificationsPanel } from "@/components/layout/NotificationsPanel";
 import { RefreshButton } from "@/components/layout/RefreshButton";
 import { RealtimeUpdates, type RealtimeNotificationItem } from "@/components/layout/RealtimeUpdates";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { ProjectSidebar } from "@/components/projects/ProjectSidebar";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 import type { ProjectCard } from "@/lib/services/types";
@@ -212,7 +213,10 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
             }}
           />
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1">
+          <div className="absolute right-4 top-4 z-10">
+            <ThemeToggle />
+          </div>
           {isPending ? (
             <div
               role="status"

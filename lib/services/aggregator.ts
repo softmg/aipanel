@@ -36,6 +36,11 @@ function countBeads(tasks: Array<{ status: string }>) {
   return counts;
 }
 
+function nonBlank(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 function latestIso(values: Array<string | null>): string | null {
   const valid = values
     .filter((value): value is string => Boolean(value))
@@ -113,11 +118,10 @@ async function getSessionsForProject(
     claudeSessions.map(async (session) => {
       const mem = memByContentId.get(session.sessionId);
       const summary = mem?.memorySessionId ? await getSessionSummary(mem.memorySessionId) : null;
-      const title = mem?.customTitle ?? mem?.userPrompt ?? session.title;
+      const title = nonBlank(mem?.customTitle) ?? nonBlank(mem?.userPrompt) ?? nonBlank(session.title);
       return {
         ...session,
         title,
-        needsTitleRefresh: !title && session.needsTitleRefresh,
         summary,
         memorySessionId: mem?.memorySessionId ?? null,
       };

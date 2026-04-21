@@ -115,11 +115,11 @@ describe("aggregator title fallback", () => {
     );
   });
 
-  it("does not request title refresh when claude-mem userPrompt supplies the title", async () => {
+  it("falls back to session title when claude-mem title fields are blank strings", async () => {
     vi.spyOn(claudeCodeSource, "listSessionsForProject").mockResolvedValue([
       {
         sessionId: "s-1",
-        needsTitleRefresh: true,
+        title: "Claude log title",
         startedAt: "2026-04-21T09:00:00.000Z",
         lastActivityAt: "2026-04-21T09:10:00.000Z",
         usage: {
@@ -128,7 +128,7 @@ describe("aggregator title fallback", () => {
           cacheReadTokens: 0,
           cacheCreationTokens: 0,
         },
-        userPromptCount: 0,
+        userPromptCount: 1,
         assistantTurnCount: 1,
         subagentCount: 0,
       },
@@ -139,8 +139,8 @@ describe("aggregator title fallback", () => {
         contentSessionId: "s-1",
         memorySessionId: null,
         project: "demo",
-        userPrompt: "Mem prompt title",
-        customTitle: null,
+        userPrompt: "   ",
+        customTitle: "",
         startedAt: "2026-04-21T09:00:00.000Z",
       },
     ]);
@@ -151,8 +151,7 @@ describe("aggregator title fallback", () => {
       }),
       async () => {
         const detail = await getProjectDetail("demo");
-        expect(detail?.sessions[0]?.title).toBe("Mem prompt title");
-        expect(detail?.sessions[0]?.needsTitleRefresh).toBe(false);
+        expect(detail?.sessions[0]?.title).toBe("Claude log title");
       },
     );
   });
