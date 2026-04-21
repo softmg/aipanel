@@ -16,15 +16,17 @@
 - локальная база [claude-mem](https://github.com/thedotmack/claude-mem) по пути `~/.claude-mem/claude-mem.db`
 - хотя бы один проект с историей Claude Code (`~/.claude/projects/...`)
 
-## Настройка списка проектов
+## Проекты
 
-1. Скопируйте пример конфига:
+aipanel автоматически находит проекты из истории Claude Code (`~/.claude/projects/...`), поэтому `projects.json` создавать не обязательно.
+
+Создайте `projects.json`, только если хотите явно настроить список проектов: задать имена, отключить лишние проекты или указать конкретные пути.
 
 ```bash
 cp projects.example.json projects.json
 ```
 
-2. Заполните `projects.json`:
+Пример `projects.json`:
 
 ```json
 {
