@@ -10,6 +10,7 @@ export type ClaudeSubagentSummary = {
   agentName: string;
   turns: number;
   lastActivityAt: string | null;
+  usage: TokenUsage;
 };
 
 export type ClaudeSessionSummary = {

@@ -445,8 +445,14 @@ export function ProjectDetail({ data }: Props) {
                                           <span className="truncate font-mono text-zinc-600 dark:text-zinc-300">
                                             @{agent.agentName}
                                           </span>
-                                          <span className="shrink-0 text-zinc-500">
-                                            {agent.turns} turns · {formatRelative(agent.lastActivityAt)}
+                                          <span className="shrink-0 text-right text-zinc-500">
+                                            {formatNumber(
+                                              agent.usage.inputTokens +
+                                                agent.usage.outputTokens +
+                                                agent.usage.cacheReadTokens +
+                                                agent.usage.cacheCreationTokens,
+                                            )}{" "}
+                                            tokens · {agent.turns} turns · {formatRelative(agent.lastActivityAt)}
                                           </span>
                                         </div>
                                       ))}

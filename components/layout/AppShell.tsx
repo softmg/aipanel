@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { NotificationsPanel } from "@/components/layout/NotificationsPanel";
 import { RefreshButton } from "@/components/layout/RefreshButton";
-import { RealtimeUpdates } from "@/components/layout/RealtimeUpdates";
+import { RealtimeUpdates, type RealtimeNotificationItem } from "@/components/layout/RealtimeUpdates";
 import { ProjectSidebar } from "@/components/projects/ProjectSidebar";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 import type { ProjectCard } from "@/lib/services/types";
+
+const RATE_LIMIT_WINDOW_MS = 10_000;
+const RATE_LIMIT_MAX_NOTIFICATIONS = 3;
 
 type Props = {
   projects: ProjectCard[];
@@ -16,22 +19,145 @@ type Props = {
   children: React.ReactNode;
 };
 
+function canUseBrowserNotifications(): boolean {
+  return typeof window !== "undefined" && "Notification" in window;
+}
+
+function getNotificationKey(item: { id: string; projectSlug?: string }): string {
+  return `${item.projectSlug ?? "global"}:${item.id}`;
+}
+
+function getNotificationBody(item: RealtimeNotificationItem): string {
+  const project = item.projectLabel ?? item.projectSlug ?? "Unknown project";
+  if (item.kind === "task" && item.status) {
+    return `${project} · Task ${item.status}`;
+  }
+  return `${project} · ${item.sessionLabel}`;
+}
+
 export function AppShell({ projects, activeSlug, notifications = [], children }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const realtimeEnabled = process.env.NEXT_PUBLIC_AIPANEL_REALTIME_ENABLED === "true";
+  const browserPushEnabled = process.env.NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED === "true";
   const [hasUpdates, setHasUpdates] = useState(false);
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [permission, setPermission] = useState<NotificationPermission>("default");
+  const seenNotificationKeysRef = useRef<Set<string>>(new Set());
+  const sentAtRef = useRef<number[]>([]);
+
+  useEffect(() => {
+    for (const notification of notifications) {
+      seenNotificationKeysRef.current.add(getNotificationKey(notification));
+    }
+  }, [notifications]);
+
+  useEffect(() => {
+    if (!browserPushEnabled || !canUseBrowserNotifications()) {
+      return;
+    }
+
+    const syncPermission = () => {
+      setPermission(window.Notification.permission);
+    };
+
+    syncPermission();
+    window.addEventListener("focus", syncPermission);
+    document.addEventListener("visibilitychange", syncPermission);
+    return () => {
+      window.removeEventListener("focus", syncPermission);
+      document.removeEventListener("visibilitychange", syncPermission);
+    };
+  }, [browserPushEnabled]);
+
+  const handleIncomingNotifications = (items: RealtimeNotificationItem[]) => {
+    if (!browserPushEnabled || !canUseBrowserNotifications()) {
+      return;
+    }
+    if (permission !== "granted") {
+      return;
+    }
+    if (document.visibilityState === "visible") {
+      return;
+    }
+
+    for (const item of items) {
+      const key = getNotificationKey(item);
+      if (seenNotificationKeysRef.current.has(key)) {
+        continue;
+      }
+      seenNotificationKeysRef.current.add(key);
+
+      const now = Date.now();
+      sentAtRef.current = sentAtRef.current.filter((timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS);
+      if (sentAtRef.current.length >= RATE_LIMIT_MAX_NOTIFICATIONS) {
+        continue;
+      }
+      sentAtRef.current.push(now);
+
+      new Notification(item.title, {
+        body: getNotificationBody(item),
+        tag: key,
+      });
+    }
+  };
+
+  const requestPushPermission = async () => {
+    if (!browserPushEnabled || !canUseBrowserNotifications()) {
+      return;
+    }
+    if (window.Notification.permission !== "default") {
+      setPermission(window.Notification.permission);
+      return;
+    }
+
+    const nextPermission = await window.Notification.requestPermission();
+    setPermission(nextPermission);
+  };
+
+  const pushButtonLabel = !browserPushEnabled
+    ? "Push off"
+    : permission === "granted"
+      ? "Push on"
+      : permission === "denied"
+        ? "Push blocked"
+        : "Enable push";
+
+  const pushButtonDisabled = !browserPushEnabled || permission === "granted" || permission === "denied";
 
   return (
     <>
       {realtimeEnabled ? (
-        <RealtimeUpdates key={activeSlug ?? "all-projects"} activeSlug={activeSlug} onHasUpdatesChange={setHasUpdates} />
+        <RealtimeUpdates
+          key={activeSlug ?? "all-projects"}
+          activeSlug={activeSlug}
+          onHasUpdatesChange={setHasUpdates}
+          onNotifications={handleIncomingNotifications}
+        />
       ) : null}
       <div className="flex h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
         <div className="flex flex-col">
           <div className="flex items-center justify-end gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={requestPushPermission}
+              disabled={pushButtonDisabled}
+              aria-label={
+                browserPushEnabled
+                  ? permission === "granted"
+                    ? "Browser push notifications enabled"
+                    : permission === "denied"
+                      ? "Browser push notifications blocked"
+                      : "Enable browser push notifications"
+                  : "Browser push notifications disabled"
+              }
+              className={`rounded border border-zinc-300 px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 ${
+                pushButtonDisabled ? "cursor-not-allowed opacity-60" : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              }`}
+            >
+              {pushButtonLabel}
+            </button>
             <button
               type="button"
               onClick={() => setDrawerOpen((value) => !value)}
