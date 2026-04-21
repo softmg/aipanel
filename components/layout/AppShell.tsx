@@ -139,8 +139,8 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
         />
       ) : null}
       <div className="flex h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-        <div className="flex flex-col">
-          <div className="flex items-center justify-end gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+        <div className="flex h-screen w-80 shrink-0 flex-col overflow-hidden">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
             <button
               type="button"
               onClick={requestPushPermission}
