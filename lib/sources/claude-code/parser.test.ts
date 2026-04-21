@@ -118,6 +118,54 @@ describe("claude-code parser", () => {
     }
   });
 
+  it("marks sessions older than one minute without title for title refresh", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
+    const filePath = path.join(tempRoot, "session-needs-title-refresh.jsonl");
+    const oldTimestamp = new Date(Date.now() - 120_000).toISOString();
+
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        type: "assistant",
+        timestamp: oldTimestamp,
+        message: { usage: { input_tokens: 1 } },
+      }),
+      "utf8",
+    );
+
+    try {
+      const summary = await parseSessionFile(filePath);
+      expect(summary.title).toBeUndefined();
+      expect(summary.needsTitleRefresh).toBe(true);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does not mark titled sessions for title refresh", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
+    const filePath = path.join(tempRoot, "session-has-title.jsonl");
+    const oldTimestamp = new Date(Date.now() - 120_000).toISOString();
+
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        type: "user",
+        timestamp: oldTimestamp,
+        message: { content: "Investigate empty session titles" },
+      }),
+      "utf8",
+    );
+
+    try {
+      const summary = await parseSessionFile(filePath);
+      expect(summary.title).toBe("Investigate empty session titles");
+      expect(summary.needsTitleRefresh).toBe(false);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("extracts known subagent name and usage from subagent logs", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
     const sessionPath = path.join(tempRoot, "session-3.jsonl");

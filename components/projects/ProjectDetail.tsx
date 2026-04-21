@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { formatNumber, formatRelative } from "@/lib/format";
 import { AgentOffice } from "@/components/projects/AgentOffice";
 import { TaskDetailDrawer } from "@/components/projects/TaskDetailDrawer";
@@ -287,10 +288,12 @@ function groupObservations(items: ClaudeMemObservation[]): ObservationDay[] {
 }
 
 export function ProjectDetail({ data }: Props) {
+  const router = useRouter();
   const [tab, setTab] = useState<"sessions" | "office" | "tasks">("sessions");
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [visibleSessionsCount, setVisibleSessionsCount] = useState(INITIAL_VISIBLE_SESSIONS);
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
+  const [refreshingTitles, setRefreshingTitles] = useState(false);
   const [observationStates, setObservationStates] = useState<Record<string, ObservationState>>({});
 
   const grouped = useMemo(() => {
@@ -307,6 +310,7 @@ export function ProjectDetail({ data }: Props) {
     [data.sessions, visibleSessionsCount],
   );
   const canLoadMoreSessions = visibleSessionsCount < data.sessions.length;
+  const sessionsNeedingTitleRefresh = data.sessions.filter((session) => session.needsTitleRefresh).length;
 
   const activeSessionId = useMemo(() => {
     return data.sessions.find((session) => session.lastActivityAt)?.sessionId ?? null;
@@ -350,6 +354,16 @@ export function ProjectDetail({ data }: Props) {
     const state = observationStates[memorySessionId] ?? emptyObservationState;
     if (state.status === "idle") {
       void loadObservations(memorySessionId);
+    }
+  }
+
+  async function refreshEmptyTitles() {
+    setRefreshingTitles(true);
+    try {
+      await fetch("/api/refresh", { method: "POST" });
+      router.refresh();
+    } finally {
+      setRefreshingTitles(false);
     }
   }
 
@@ -430,6 +444,22 @@ export function ProjectDetail({ data }: Props) {
 
         {tab === "sessions" ? (
           <section id={sessionsPanelId} role="tabpanel" aria-labelledby={sessionsTabId}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-xs text-zinc-500">
+                {sessionsNeedingTitleRefresh > 0
+                  ? `${sessionsNeedingTitleRefresh} sessions can refresh empty titles`
+                  : "All eligible sessions have titles"}
+              </p>
+              <button
+                type="button"
+                onClick={refreshEmptyTitles}
+                disabled={refreshingTitles || sessionsNeedingTitleRefresh === 0}
+                aria-label="Update empty session titles"
+                className="rounded border border-zinc-300 px-3 py-1.5 text-sm transition hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+              >
+                {refreshingTitles ? "Updating titles…" : "Update empty titles"}
+              </button>
+            </div>
             <div className="overflow-x-auto overflow-y-visible rounded-lg border border-zinc-200 dark:border-zinc-800">
               <table className="w-full text-sm">
                 <thead className="bg-zinc-50 text-left dark:bg-zinc-900">

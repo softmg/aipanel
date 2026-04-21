@@ -331,6 +331,7 @@ function asIso(value: string | undefined): string | null {
 }
 
 const MAX_TITLE_LENGTH = 120;
+const TITLE_REFRESH_SESSION_AGE_MS = 60_000;
 
 function collapseWhitespace(value: string): string {
   return value.replace(/\s+/g, " ").trim();
@@ -378,6 +379,15 @@ function parseTitleFromUserContent(content: NonNullable<RawEvent["message"]>["co
     .join(" ");
 
   return titleFromText(text);
+}
+
+function needsTitleRefresh(title: string | undefined, startedAt: string | null, now = Date.now()): boolean {
+  if (title || !startedAt) {
+    return false;
+  }
+
+  const startedAtMs = new Date(startedAt).valueOf();
+  return !Number.isNaN(startedAtMs) && now - startedAtMs > TITLE_REFRESH_SESSION_AGE_MS;
 }
 
 export async function parseSessionFile(filePath: string): Promise<ClaudeSessionSummary> {
@@ -453,6 +463,7 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
   const summary: ClaudeSessionSummary = {
     sessionId,
     title,
+    needsTitleRefresh: needsTitleRefresh(title, startedAt),
     startedAt,
     lastActivityAt: lastActivityAt ?? stat.mtime.toISOString(),
     usage: {

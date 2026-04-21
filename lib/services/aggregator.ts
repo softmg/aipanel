@@ -113,9 +113,11 @@ async function getSessionsForProject(
     claudeSessions.map(async (session) => {
       const mem = memByContentId.get(session.sessionId);
       const summary = mem?.memorySessionId ? await getSessionSummary(mem.memorySessionId) : null;
+      const title = mem?.customTitle ?? mem?.userPrompt ?? session.title;
       return {
         ...session,
-        title: mem?.customTitle ?? mem?.userPrompt ?? session.title,
+        title,
+        needsTitleRefresh: !title && session.needsTitleRefresh,
         summary,
         memorySessionId: mem?.memorySessionId ?? null,
       };

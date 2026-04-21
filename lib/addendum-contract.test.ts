@@ -7,20 +7,23 @@ async function read(relativePath: string): Promise<string> {
 }
 
 describe("architect addendum contracts", () => {
-  it("keeps tab semantics and warning accessibility in ProjectDetail", async () => {
+  it("keeps tab semantics, warning accessibility, and title refresh action in ProjectDetail", async () => {
     const source = await read("components/projects/ProjectDetail.tsx");
     expect(source).toContain('role="tablist"');
     expect(source).toContain('role="tab"');
     expect(source).toContain('role="tabpanel"');
     expect(source).toContain('aria-live="polite"');
     expect(source).toContain("Partial data loaded");
+    expect(source).toContain("Update empty titles");
+    expect(source).toContain("Update empty session titles");
   });
 
-  it("keeps sidebar empty state and focus-visible styles", async () => {
+  it("keeps sidebar empty state, focus-visible styles, and incremental loading control", async () => {
     const source = await read("components/projects/ProjectSidebar.tsx");
     expect(source).toContain("No projects configured");
     expect(source).toContain("focus-visible:outline");
     expect(source).toContain("aria-current");
+    expect(source).toContain("Загрузить ещё");
   });
 
   it("keeps kanban empty-column placeholder text", async () => {
