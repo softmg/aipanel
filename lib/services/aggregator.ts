@@ -115,7 +115,7 @@ async function getSessionsForProject(
       const summary = mem?.memorySessionId ? await getSessionSummary(mem.memorySessionId) : null;
       return {
         ...session,
-        title: mem?.customTitle ?? mem?.userPrompt ?? undefined,
+        title: mem?.customTitle ?? mem?.userPrompt ?? session.title,
         summary,
         memorySessionId: mem?.memorySessionId ?? null,
       };

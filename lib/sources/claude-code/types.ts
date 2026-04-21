@@ -14,6 +14,7 @@ export type ClaudeSubagentSummary = {
 
 export type ClaudeSessionSummary = {
   sessionId: string;
+  title?: string;
   startedAt: string | null;
   lastActivityAt: string | null;
   usage: TokenUsage;

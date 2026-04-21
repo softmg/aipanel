@@ -19,6 +19,12 @@ type RawEvent = {
   agentName?: string;
   message?: {
     usage?: RawUsage;
+    content?:
+      | string
+      | Array<{
+          type?: string;
+          text?: string;
+        }>;
   };
 };
 
@@ -148,6 +154,57 @@ function asIso(value: string | undefined): string | null {
   return Number.isNaN(parsed.valueOf()) ? null : parsed.toISOString();
 }
 
+const MAX_TITLE_LENGTH = 120;
+
+function collapseWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function truncateTitle(value: string): string {
+  if (value.length <= MAX_TITLE_LENGTH) {
+    return value;
+  }
+
+  const truncated = value.slice(0, MAX_TITLE_LENGTH - 1).trimEnd();
+  return `${truncated}…`;
+}
+
+function isCommandCaveatOrReminder(value: string): boolean {
+  return (
+    value.includes("<system-reminder>") ||
+    value.includes("</system-reminder>") ||
+    value.includes("local command caveat") ||
+    value.includes("PreToolUse:")
+  );
+}
+
+function parseTitleFromUserContent(content: NonNullable<RawEvent["message"]>["content"]): string | null {
+  if (typeof content === "string") {
+    const normalized = collapseWhitespace(content);
+    if (!normalized || isCommandCaveatOrReminder(normalized)) {
+      return null;
+    }
+    return truncateTitle(normalized);
+  }
+
+  if (!Array.isArray(content)) {
+    return null;
+  }
+
+  const text = content
+    .filter((item) => item?.type === "text" && typeof item.text === "string")
+    .map((item) => item.text?.trim() ?? "")
+    .filter(Boolean)
+    .join(" ");
+
+  const normalized = collapseWhitespace(text);
+  if (!normalized || isCommandCaveatOrReminder(normalized)) {
+    return null;
+  }
+
+  return truncateTitle(normalized);
+}
+
 export async function parseSessionFile(filePath: string): Promise<ClaudeSessionSummary> {
   const stat = await fs.stat(filePath);
   const cached = cache.get(filePath);
@@ -158,6 +215,7 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
   const sessionId = path.basename(filePath, ".jsonl");
   let startedAt: string | null = null;
   let lastActivityAt: string | null = null;
+  let title: string | undefined;
   let userPromptCount = 0;
   let assistantTurnCount = 0;
   let inputTokens = 0;
@@ -188,6 +246,12 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
 
     if (event.type === "user") {
       userPromptCount += 1;
+      if (!title) {
+        const candidateTitle = parseTitleFromUserContent(event.message?.content);
+        if (candidateTitle) {
+          title = candidateTitle;
+        }
+      }
     }
 
     if (event.type === "assistant") {
@@ -206,6 +270,7 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
 
   const summary: ClaudeSessionSummary = {
     sessionId,
+    title,
     startedAt,
     lastActivityAt: lastActivityAt ?? stat.mtime.toISOString(),
     usage: {
