@@ -116,17 +116,15 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
     setPermission(nextPermission);
   };
 
-  const pushButtonLabel = !browserPushEnabled
-    ? "Push off"
-    : permission === "granted"
-      ? "Push on"
-      : permission === "denied"
-        ? "Push blocked"
-        : "Enable push";
-
   const pushButtonDisabled = !browserPushEnabled || permission === "granted" || permission === "denied";
   const pushPermissionBlocked = browserPushEnabled && permission === "denied";
-  const pushPermissionHelp = pushPermissionBlocked ? "Enable notifications in browser site settings, then reload." : undefined;
+  const pushPermissionHelp = pushPermissionBlocked
+    ? "Enable notifications in browser site settings, then reload."
+    : !browserPushEnabled
+      ? "Browser push notifications disabled"
+      : permission === "granted"
+        ? "Browser push notifications enabled"
+        : "Enable browser push notifications";
 
   return (
     <>
@@ -155,11 +153,21 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
                       : "Enable browser push notifications"
                   : "Browser push notifications disabled"
               }
-              className={`rounded border border-zinc-300 px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 ${
+              className={`inline-flex h-9 w-9 items-center justify-center rounded border border-zinc-300 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 ${
                 pushButtonDisabled ? "cursor-not-allowed opacity-60" : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
               }`}
             >
-              {pushButtonLabel}
+              <svg
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path d="M10 3.5a4 4 0 0 0-4 4V9c0 .86-.28 1.7-.8 2.4L4 13h12l-1.2-1.6A4 4 0 0 1 14 9V7.5a4 4 0 0 0-4-4Z" />
+                <path d="M8 14a2 2 0 0 0 4 0" />
+              </svg>
             </button>
             <button
               type="button"
