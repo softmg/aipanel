@@ -2,12 +2,18 @@
 
 Локальная панель для просмотра Claude sessions, наблюдений из claude-mem и kanban-задач из beads.
 
+![aipanel project sessions view](public/aipanel-screenshot.png)
+
+![aipanel Claude Office view](public/aipanel-office-screenshot.png)
+
+![aipanel Tasks view](public/aipanel-tasks-screenshot.png)
+
 ## Требования
 
 - Node.js 20+
 - pnpm
-- установлен `bd` (beads CLI)
-- локальная база claude-mem по пути `~/.claude-mem/claude-mem.db`
+- установлен `bd` ([beads CLI](https://github.com/gastownhall/beads))
+- локальная база [claude-mem](https://github.com/thedotmack/claude-mem) по пути `~/.claude-mem/claude-mem.db`
 - хотя бы один проект с историей Claude Code (`~/.claude/projects/...`)
 
 ## Настройка списка проектов
@@ -102,6 +108,21 @@ AIPANEL_ALLOWED_DEV_ORIGINS=localhost,100.89.42.77 make dev
 ```bash
 AIPANEL_ALLOWED_DEV_ORIGINS=localhost,100.89.42.77
 ```
+
+## Browser push-уведомления (во вкладке)
+
+Для включения системных уведомлений браузера (пока вкладка aipanel открыта):
+
+```bash
+NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED=true
+```
+
+Далее в интерфейсе нажмите `Enable push` и подтвердите permission в браузере.
+
+Ограничения:
+- работает только при открытой вкладке aipanel;
+- при активной видимой вкладке OS-уведомления не показываются;
+- включён dedupe и rate-limit, чтобы не спамить повторяющимися событиями.
 
 ## Если данные не появились
 
