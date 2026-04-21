@@ -316,4 +316,77 @@ describe("claude-code parser", () => {
       await fs.rm(tempRoot, { recursive: true, force: true });
     }
   });
+
+  it("does not replace explicit subagent display names with generic prompt roles", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
+    const sessionPath = path.join(tempRoot, "session-6.jsonl");
+    const subagentsDir = path.join(tempRoot, "session-6", "subagents");
+    const subagentPath = path.join(subagentsDir, "agent-a999.jsonl");
+
+    await fs.mkdir(subagentsDir, { recursive: true });
+    await fs.writeFile(
+      sessionPath,
+      [
+        JSON.stringify({
+          type: "assistant",
+          timestamp: "2026-04-21T10:00:00.000Z",
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "call-agent-2",
+                name: "Agent",
+                input: {
+                  description: "coder-token-split",
+                  prompt: "You are coder-1. Claim task #1 and implement token split.",
+                },
+              },
+            ],
+          },
+        }),
+        JSON.stringify({
+          type: "user",
+          timestamp: "2026-04-21T10:00:01.000Z",
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "call-agent-2",
+                content: "Async agent launched successfully. agentId: a999",
+              },
+            ],
+          },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+    await fs.writeFile(
+      subagentPath,
+      [
+        JSON.stringify({
+          type: "user",
+          timestamp: "2026-04-21T10:00:02.000Z",
+          agentId: "a999",
+          message: { content: "You are coder-1. Claim task #1 and implement token split." },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          timestamp: "2026-04-21T10:00:03.000Z",
+          agentId: "a999",
+          message: { usage: { input_tokens: 10, output_tokens: 20 } },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const summary = await parseSessionFile(sessionPath);
+      expect(summary.subagents?.[0]).toMatchObject({
+        agentId: "a999",
+        agentName: "coder-token-split",
+      });
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
 });

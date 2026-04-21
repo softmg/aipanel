@@ -89,11 +89,15 @@ function parseAgentNameFromPrompt(content: NonNullable<RawEvent["message"]>["con
   return match?.[1]?.toLowerCase() ?? null;
 }
 
-function getBetterAgentName(current: string, candidate: string | undefined): string {
+function isFallbackAgentName(value: string, agentId: string): boolean {
+  return value === "" || value === agentId || /^[a-f0-9]{12,}$/i.test(value);
+}
+
+function getBetterAgentName(current: string, candidate: string | undefined, agentId: string): string {
   if (!candidate) {
     return current;
   }
-  return current === "" || /^[a-f0-9]{12,}$/i.test(current) ? candidate : current;
+  return isFallbackAgentName(current, agentId) ? candidate : current;
 }
 
 function parseAgentDescriptionByIdFromEvent(
@@ -218,7 +222,7 @@ async function parseSubagentFile(
 
     if (typeof event.agentId === "string" && event.agentId.trim()) {
       agentId = event.agentId;
-      agentName = getBetterAgentName(agentName, teamMemberNames.get(agentId) ?? parentAgentNames.get(agentId));
+      agentName = getBetterAgentName(agentName, teamMemberNames.get(agentId) ?? parentAgentNames.get(agentId), agentId);
     }
 
     if (typeof event.agentName === "string" && event.agentName.trim()) {
@@ -228,7 +232,7 @@ async function parseSubagentFile(
 
     if (event.type === "user") {
       const promptAgentName = parseAgentNameFromPrompt(event.message?.content);
-      if (promptAgentName) {
+      if (promptAgentName && isFallbackAgentName(agentName, agentId)) {
         agentName = promptAgentName;
       }
     }
