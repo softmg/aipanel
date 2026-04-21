@@ -42,7 +42,8 @@ export function ThemeToggle() {
   }, []);
 
   function toggleTheme() {
-    const nextTheme: Theme = isDark ? "light" : "dark";
+    const currentTheme: Theme = document.documentElement.classList.contains("dark") ? "dark" : "light";
+    const nextTheme: Theme = currentTheme === "dark" ? "light" : "dark";
     window.localStorage.setItem(storageKey, nextTheme);
     applyTheme(nextTheme);
     setTheme(nextTheme);

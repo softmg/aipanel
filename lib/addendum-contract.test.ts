@@ -31,10 +31,11 @@ describe("architect addendum contracts", () => {
     expect(source).toContain("No tasks");
   });
 
-  it("keeps ThemeToggle hydration-safe initial render", async () => {
+  it("keeps ThemeToggle hydration-safe initial render and DOM-backed toggling", async () => {
     const source = await read("components/layout/ThemeToggle.tsx");
     expect(source).toContain('useState<Theme>("light")');
     expect(source).toContain("useEffect");
+    expect(source).toContain('classList.contains("dark")');
     expect(source).not.toContain("useState<Theme>(getInitialTheme)");
   });
 });
