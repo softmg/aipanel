@@ -34,6 +34,7 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
   const realtimeEnabled = process.env.NEXT_PUBLIC_AIPANEL_REALTIME_ENABLED === "true";
   const [hasUpdates, setHasUpdates] = useState(false);
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
     <>
@@ -42,7 +43,18 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
       ) : null}
       <div className="flex h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
         <div className="flex flex-col">
-          <div className="flex items-center justify-end border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+          <div className="flex items-center justify-end gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+            <button
+              type="button"
+              onClick={() => setDrawerOpen((value) => !value)}
+              className="rounded border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              aria-label={drawerOpen ? "Close notifications" : "Open notifications"}
+              aria-haspopup="dialog"
+              aria-expanded={drawerOpen}
+              aria-controls="notifications-title"
+            >
+              Notifications
+            </button>
             <RefreshButton hasUpdates={hasUpdates} />
           </div>
           <ProjectSidebar
@@ -83,7 +95,7 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
             children
           )}
         </div>
-        <NotificationsPanel notifications={notifications} />
+        <NotificationsPanel notifications={notifications} open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       </div>
     </>
   );
