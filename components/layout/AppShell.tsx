@@ -6,25 +6,13 @@ import { NotificationsPanel } from "@/components/layout/NotificationsPanel";
 import { RefreshButton } from "@/components/layout/RefreshButton";
 import { RealtimeUpdates } from "@/components/layout/RealtimeUpdates";
 import { ProjectSidebar } from "@/components/projects/ProjectSidebar";
+import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 import type { ProjectCard } from "@/lib/services/types";
-
-type NotificationItem = {
-  id: string;
-  sessionId: string;
-  sessionLabel: string;
-  projectSlug?: string;
-  projectLabel?: string;
-  createdAt: string;
-  kind: "question" | "permission" | "task";
-  title: string;
-  details?: string;
-  status?: string;
-};
 
 type Props = {
   projects: ProjectCard[];
   activeSlug?: string;
-  notifications?: NotificationItem[];
+  notifications?: ClaudeNotification[];
   children: React.ReactNode;
 };
 
@@ -51,9 +39,27 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
               aria-label={drawerOpen ? "Close notifications" : "Open notifications"}
               aria-haspopup="dialog"
               aria-expanded={drawerOpen}
-              aria-controls="notifications-title"
+              aria-controls="notifications-panel"
             >
-              Notifications
+              <span className="inline-flex items-center gap-2">
+                <svg
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  className="h-4 w-4"
+                  aria-hidden="true"
+                >
+                  <path d="M10 3.5a4 4 0 0 0-4 4V9c0 .86-.28 1.7-.8 2.4L4 13h12l-1.2-1.6A4 4 0 0 1 14 9V7.5a4 4 0 0 0-4-4Z" />
+                  <path d="M8 14a2 2 0 0 0 4 0" />
+                </svg>
+                Notifications
+                {notifications.length > 0 ? (
+                  <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
+                    {notifications.length}
+                  </span>
+                ) : null}
+              </span>
             </button>
             <RefreshButton hasUpdates={hasUpdates} />
           </div>

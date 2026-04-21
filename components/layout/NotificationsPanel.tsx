@@ -74,6 +74,7 @@ export function NotificationsPanel({ notifications, open, onClose }: Props) {
         className="absolute inset-0 h-full w-full cursor-default bg-black/30"
       />
       <aside
+        id="notifications-panel"
         role="dialog"
         aria-modal="true"
         aria-labelledby="notifications-title"
