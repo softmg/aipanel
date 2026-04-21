@@ -13,3 +13,5 @@
 - Final verification must include browser checks for layout, zero states, and warnings.
 - Modal/drawer components must set `role="dialog"`, `aria-modal="true"`, `aria-labelledby`, close on Escape, move focus to the close button on open, and provide an accessible backdrop dismissal.
 - Task/issue ids in API routes must be validated with a zod regex (e.g. `^[a-z0-9][a-z0-9_-]*$`) before reaching shell adapters.
+- Realtime read-only updates should prefer SSE over WebSocket unless the client must send messages over the same channel; browser listeners should debounce `router.refresh()` to avoid refresh storms.
+- Agent Team session details must display human-readable agent names when available and include per-agent token totals from subagent logs.
