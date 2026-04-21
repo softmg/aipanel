@@ -262,22 +262,26 @@ function truncateTitle(value: string): string {
   return `${truncated}…`;
 }
 
-function isCommandCaveatOrReminder(value: string): boolean {
-  return (
-    value.includes("<system-reminder>") ||
-    value.includes("</system-reminder>") ||
-    value.includes("local command caveat") ||
-    value.includes("PreToolUse:")
-  );
+function stripTitleNoise(value: string): string {
+  return value
+    .replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, " ")
+    .replace(/<local-command-caveat>[\s\S]*?<\/local-command-caveat>/gi, " ")
+    .replace(/<command-(?:name|message|args)>[\s\S]*?<\/command-(?:name|message|args)>/gi, " ")
+    .replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/gi, " ")
+    .replace(/\[Image #\d+\]/gi, " ");
+}
+
+function titleFromText(value: string): string | null {
+  const normalized = collapseWhitespace(stripTitleNoise(value));
+  if (!normalized) {
+    return null;
+  }
+  return truncateTitle(normalized);
 }
 
 function parseTitleFromUserContent(content: NonNullable<RawEvent["message"]>["content"]): string | null {
   if (typeof content === "string") {
-    const normalized = collapseWhitespace(content);
-    if (!normalized || isCommandCaveatOrReminder(normalized)) {
-      return null;
-    }
-    return truncateTitle(normalized);
+    return titleFromText(content);
   }
 
   if (!Array.isArray(content)) {
@@ -290,12 +294,7 @@ function parseTitleFromUserContent(content: NonNullable<RawEvent["message"]>["co
     .filter(Boolean)
     .join(" ");
 
-  const normalized = collapseWhitespace(text);
-  if (!normalized || isCommandCaveatOrReminder(normalized)) {
-    return null;
-  }
-
-  return truncateTitle(normalized);
+  return titleFromText(text);
 }
 
 export async function parseSessionFile(filePath: string): Promise<ClaudeSessionSummary> {

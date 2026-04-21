@@ -89,6 +89,35 @@ describe("claude-code parser", () => {
     }
   });
 
+  it("uses real prompt text from mixed hook and command content", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
+    const filePath = path.join(tempRoot, "session-mixed-content.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        type: "user",
+        timestamp: "2026-04-21T10:00:00.000Z",
+        message: {
+          content:
+            '<system-reminder>SessionStart:clear hook success</system-reminder>\n<local-command-caveat>Ignore command output</local-command-caveat>\n<command-name>/clear</command-name>\n<command-message>clear</command-message>\n<command-args></command-args>\n<local-command-stdout></local-command-stdout>\nдо сих пор поподаются сессии без названия, нужно сделать чтобы сессии были названы по краткому содержанию первого промпта в сессиии [Image #4]',
+        },
+      }),
+      "utf8",
+    );
+
+    try {
+      const summary = await parseSessionFile(filePath);
+      expect(summary.title).toContain("до сих пор поподаются сессии без названия");
+      expect(summary.title).not.toContain("system-reminder");
+      expect(summary.title).not.toContain("command-name");
+      expect(summary.title).not.toContain("Image");
+      expect(summary.title?.length).toBeLessThanOrEqual(120);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("extracts known subagent name and usage from subagent logs", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
     const sessionPath = path.join(tempRoot, "session-3.jsonl");
