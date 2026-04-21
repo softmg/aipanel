@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import { formatNumber, formatRelative } from "@/lib/format";
 import { TaskDetailDrawer } from "@/components/projects/TaskDetailDrawer";
 import type { ClaudeMemObservation } from "@/lib/sources/claude-mem/types";
+import type { ClaudeSessionSummary } from "@/lib/sources/claude-code/types";
 import type { ProjectDetail as ProjectDetailData } from "@/lib/services/types";
 
 type Props = {
@@ -90,6 +91,108 @@ function getTimeLabel(value: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function getActivityBadgeClass(state: "active" | "idle"): string {
+  return state === "active"
+    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300"
+    : "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
+}
+
+function getActivityLabel(state: "active" | "idle"): string {
+  return state === "active" ? "Active" : "Idle";
+}
+
+type SessionTeamBadgeProps = {
+  session: ClaudeSessionSummary;
+  active: boolean;
+};
+
+function SessionTeamBadge({ session, active }: SessionTeamBadgeProps) {
+  const agents = session.subagents ?? [];
+  const totalTokens = agents.reduce((sum, agent) => {
+    return (
+      sum +
+      agent.usage.inputTokens +
+      agent.usage.outputTokens +
+      agent.usage.cacheReadTokens +
+      agent.usage.cacheCreationTokens
+    );
+  }, 0);
+  const teamState = active ? "active" : "idle";
+  const [open, setOpen] = useState(false);
+  const latestAgentTimestamp = agents.reduce((latest, agent) => {
+    const timestamp = agent.lastActivityAt ? new Date(agent.lastActivityAt).valueOf() : Number.NaN;
+    return Number.isNaN(timestamp) ? latest : Math.max(latest, timestamp);
+  }, Number.NEGATIVE_INFINITY);
+
+  return (
+    <div
+      className="relative inline-flex"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setOpen(false);
+        }
+      }}
+    >
+      <button
+        type="button"
+        aria-label={`Team ${session.subagentCount}. ${getActivityLabel(teamState)}. Hover or focus for agent details.`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        className="inline-flex items-center rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:bg-violet-500/20 dark:text-violet-300"
+      >
+        Team {session.subagentCount}
+      </button>
+      <div className={`absolute left-0 top-full z-20 mt-2 min-w-[320px] max-w-[420px] rounded-lg border border-zinc-200 bg-white p-3 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 ${open ? "block" : "hidden"}`}>
+        <div className="space-y-2">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Agent Team</p>
+              <p className="text-[11px] text-zinc-500">
+                {agents.length} agents · {formatNumber(totalTokens)} tokens
+              </p>
+            </div>
+            <span className={`rounded px-2 py-0.5 text-[10px] font-medium ${getActivityBadgeClass(teamState)}`}>
+              {getActivityLabel(teamState)}
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {agents.map((agent) => {
+              const agentTokens =
+                agent.usage.inputTokens +
+                agent.usage.outputTokens +
+                agent.usage.cacheReadTokens +
+                agent.usage.cacheCreationTokens;
+              const agentTimestamp = agent.lastActivityAt ? new Date(agent.lastActivityAt).valueOf() : Number.NaN;
+              const agentState =
+                active && !Number.isNaN(agentTimestamp) && agentTimestamp === latestAgentTimestamp ? "active" : "idle";
+
+              return (
+                <div
+                  key={agent.agentId}
+                  className="rounded border border-zinc-200 bg-zinc-50 px-2.5 py-2 text-xs dark:border-zinc-800 dark:bg-zinc-900"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="truncate font-mono text-zinc-700 dark:text-zinc-200">@{agent.agentName}</span>
+                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${getActivityBadgeClass(agentState)}`}>
+                      {getActivityLabel(agentState)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-zinc-500">
+                    {formatNumber(agentTokens)} tokens · {agent.turns} turns · {formatRelative(agent.lastActivityAt)}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function parseObservationFiles(value: string | null): string[] {
@@ -309,7 +412,7 @@ export function ProjectDetail({ data }: Props) {
 
         {tab === "sessions" ? (
           <section id={sessionsPanelId} role="tabpanel" aria-labelledby={sessionsTabId}>
-            <div className="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
+            <div className="overflow-x-auto overflow-y-visible rounded-lg border border-zinc-200 dark:border-zinc-800">
               <table className="w-full text-sm">
                 <thead className="bg-zinc-50 text-left dark:bg-zinc-900">
                   <tr>
@@ -378,9 +481,7 @@ export function ProjectDetail({ data }: Props) {
                               </button>
                               <p className="max-w-[320px] truncate">{session.title ?? session.sessionId}</p>
                               {session.subagentCount > 0 ? (
-                                <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-500/20 dark:text-violet-300">
-                                  Team {session.subagentCount}
-                                </span>
+                                <SessionTeamBadge session={session} active={activeSessionId === session.sessionId} />
                               ) : null}
                               {activeSessionId === session.sessionId ? (
                                 <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300">
