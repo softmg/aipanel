@@ -78,10 +78,6 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
     if (permission !== "granted") {
       return;
     }
-    if (document.visibilityState === "visible") {
-      return;
-    }
-
     for (const item of items) {
       const key = getNotificationKey(item);
       if (seenNotificationKeysRef.current.has(key)) {
