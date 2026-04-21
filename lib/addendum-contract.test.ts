@@ -30,4 +30,11 @@ describe("architect addendum contracts", () => {
     const source = await read("components/projects/ProjectDetail.tsx");
     expect(source).toContain("No tasks");
   });
+
+  it("keeps ThemeToggle hydration-safe initial render", async () => {
+    const source = await read("components/layout/ThemeToggle.tsx");
+    expect(source).toContain('useState<Theme>("light")');
+    expect(source).toContain("useEffect");
+    expect(source).not.toContain("useState<Theme>(getInitialTheme)");
+  });
 });

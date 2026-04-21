@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Theme = "light" | "dark";
 
@@ -25,14 +25,28 @@ function applyTheme(theme: Theme) {
 }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme);
-  const isDark = theme === "dark";
+  const [theme, setTheme] = useState<Theme>("light");
+  const [mounted, setMounted] = useState(false);
+  const isDark = mounted && theme === "dark";
+
+  useEffect(() => {
+    const initialTheme = getInitialTheme();
+    applyTheme(initialTheme);
+
+    const frame = window.requestAnimationFrame(() => {
+      setTheme(initialTheme);
+      setMounted(true);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   function toggleTheme() {
     const nextTheme: Theme = isDark ? "light" : "dark";
     window.localStorage.setItem(storageKey, nextTheme);
     applyTheme(nextTheme);
     setTheme(nextTheme);
+    setMounted(true);
   }
 
   return (
