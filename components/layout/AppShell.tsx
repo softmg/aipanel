@@ -126,6 +126,7 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
 
   const pushButtonDisabled = !browserPushEnabled || permission === "granted" || permission === "denied";
   const pushPermissionBlocked = browserPushEnabled && permission === "denied";
+  const pushPermissionHelp = pushPermissionBlocked ? "Enable notifications in browser site settings, then reload." : undefined;
 
   return (
     <>
@@ -140,33 +141,26 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
       <div className="flex h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
         <div className="flex flex-col">
           <div className="flex items-center justify-end gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
-            <div className="relative inline-flex flex-col items-end gap-1">
-              <button
-                type="button"
-                onClick={requestPushPermission}
-                disabled={pushButtonDisabled}
-                aria-describedby={pushPermissionBlocked ? "push-permission-help" : undefined}
-                aria-label={
-                  browserPushEnabled
-                    ? permission === "granted"
-                      ? "Browser push notifications enabled"
-                      : permission === "denied"
-                        ? "Browser push notifications blocked"
-                        : "Enable browser push notifications"
-                    : "Browser push notifications disabled"
-                }
-                className={`rounded border border-zinc-300 px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 ${
-                  pushButtonDisabled ? "cursor-not-allowed opacity-60" : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                }`}
-              >
-                {pushButtonLabel}
-              </button>
-              {pushPermissionBlocked ? (
-                <p id="push-permission-help" className="max-w-48 text-right text-[11px] leading-tight text-zinc-500 dark:text-zinc-400">
-                  Enable notifications in browser site settings, then reload.
-                </p>
-              ) : null}
-            </div>
+            <button
+              type="button"
+              onClick={requestPushPermission}
+              disabled={pushButtonDisabled}
+              title={pushPermissionHelp}
+              aria-label={
+                browserPushEnabled
+                  ? permission === "granted"
+                    ? "Browser push notifications enabled"
+                    : permission === "denied"
+                      ? "Browser push notifications blocked. Enable notifications in browser site settings, then reload."
+                      : "Enable browser push notifications"
+                  : "Browser push notifications disabled"
+              }
+              className={`rounded border border-zinc-300 px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 ${
+                pushButtonDisabled ? "cursor-not-allowed opacity-60" : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              }`}
+            >
+              {pushButtonLabel}
+            </button>
             <button
               type="button"
               onClick={() => setDrawerOpen((value) => !value)}
