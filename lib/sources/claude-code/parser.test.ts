@@ -211,4 +211,82 @@ describe("claude-code parser", () => {
       await fs.rm(tempRoot, { recursive: true, force: true });
     }
   });
+
+  it("uses parent Agent description for subagent display names when logs only contain ids", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
+    const sessionPath = path.join(tempRoot, "session-5.jsonl");
+    const subagentsDir = path.join(tempRoot, "session-5", "subagents");
+    const subagentPath = path.join(subagentsDir, "agent-a789.jsonl");
+
+    await fs.mkdir(subagentsDir, { recursive: true });
+    await fs.writeFile(
+      sessionPath,
+      [
+        JSON.stringify({
+          type: "assistant",
+          uuid: "parent-1",
+          timestamp: "2026-04-21T10:00:00.000Z",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "call-agent-1",
+                name: "Agent",
+                input: {
+                  description: "Review team popover",
+                  prompt: "Review the UI change.",
+                },
+              },
+            ],
+          },
+        }),
+        JSON.stringify({
+          type: "user",
+          uuid: "parent-2",
+          timestamp: "2026-04-21T10:00:01.000Z",
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "call-agent-1",
+                content:
+                  "Async agent launched successfully. agentId: a789 (internal ID - do not mention to user.)",
+              },
+            ],
+          },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+    await fs.writeFile(
+      subagentPath,
+      [
+        JSON.stringify({
+          type: "assistant",
+          timestamp: "2026-04-21T10:00:02.000Z",
+          agentId: "a789",
+          message: {
+            usage: {
+              input_tokens: 5,
+              output_tokens: 6,
+              cache_read_input_tokens: 7,
+              cache_creation_input_tokens: 8,
+            },
+          },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const summary = await parseSessionFile(sessionPath);
+      expect(summary.subagents?.[0]).toMatchObject({
+        agentId: "a789",
+        agentName: "Review team popover",
+      });
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
 });

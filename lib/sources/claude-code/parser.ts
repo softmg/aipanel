@@ -12,6 +12,19 @@ type RawUsage = {
   cache_creation_input_tokens?: number;
 };
 
+type RawContentItem = {
+  type?: string;
+  id?: string;
+  text?: string;
+  name?: string;
+  tool_use_id?: string;
+  content?: string | Array<{ type?: string; text?: string }>;
+  input?: {
+    description?: unknown;
+    prompt?: unknown;
+  };
+};
+
 type RawEvent = {
   type?: string;
   timestamp?: string;
@@ -20,12 +33,7 @@ type RawEvent = {
   agentName?: string;
   message?: {
     usage?: RawUsage;
-    content?:
-      | string
-      | Array<{
-          type?: string;
-          text?: string;
-        }>;
+    content?: string | RawContentItem[];
   };
 };
 
@@ -43,14 +51,82 @@ function parseSubagentName(fileName: string): string {
 
 const PROMPT_AGENT_NAME_PATTERN =
   /\b(coder-\d+|tech-lead|security-reviewer|logic-reviewer|quality-reviewer|unified-reviewer|architect-(?:frontend|backend|systems)|browser-verifier|ci-verifier|spec-verifier|risk-tester|codebase-researcher|reference-researcher)\b/i;
+const AGENT_RESULT_ID_PATTERN = /agentId:\s*([\w-]+)/;
+
+function extractTextContent(content: NonNullable<RawEvent["message"]>["content"]): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .map((item) => {
+      if (typeof item.text === "string") {
+        return item.text;
+      }
+      if (typeof item.content === "string") {
+        return item.content;
+      }
+      if (Array.isArray(item.content)) {
+        return item.content.map((nested) => nested.text ?? "").join(" ");
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join(" ");
+}
 
 function parseAgentNameFromPrompt(content: NonNullable<RawEvent["message"]>["content"]): string | null {
-  if (typeof content !== "string") {
+  const text = extractTextContent(content);
+  if (!text) {
     return null;
   }
 
-  const match = content.match(PROMPT_AGENT_NAME_PATTERN);
+  const match = text.match(PROMPT_AGENT_NAME_PATTERN);
   return match?.[1]?.toLowerCase() ?? null;
+}
+
+function getBetterAgentName(current: string, candidate: string | undefined): string {
+  if (!candidate) {
+    return current;
+  }
+  return current === "" || /^[a-f0-9]{12,}$/i.test(current) ? candidate : current;
+}
+
+function parseAgentDescriptionByIdFromEvent(
+  event: RawEvent,
+  pendingAgentDescriptions: Map<string, string>,
+): Map<string, string> {
+  const descriptions = new Map<string, string>();
+  const content = Array.isArray(event.message?.content) ? event.message.content : [];
+
+  for (const item of content) {
+    if (item.type === "tool_use" && item.name === "Agent" && typeof item.input?.description === "string") {
+      pendingAgentDescriptions.set(item.id ?? "", item.input.description);
+      continue;
+    }
+
+    if (item.type !== "tool_result" || !item.tool_use_id) {
+      continue;
+    }
+
+    const description = pendingAgentDescriptions.get(item.tool_use_id);
+    if (!description) {
+      continue;
+    }
+
+    const text = extractTextContent([item]);
+    const agentId = text.match(AGENT_RESULT_ID_PATTERN)?.[1];
+    if (agentId) {
+      descriptions.set(agentId, description);
+    }
+    pendingAgentDescriptions.delete(item.tool_use_id);
+  }
+
+  return descriptions;
 }
 
 const teamMemberNamesPromise = loadTeamMemberNames();
@@ -95,11 +171,15 @@ async function loadTeamMemberNames(): Promise<Map<string, string>> {
   return names;
 }
 
-async function parseSubagentFile(filePath: string, fileName: string): Promise<ClaudeSubagentSummary> {
+async function parseSubagentFile(
+  filePath: string,
+  fileName: string,
+  parentAgentNames: Map<string, string>,
+): Promise<ClaudeSubagentSummary> {
   let turns = 0;
   let lastActivityAt: string | null = null;
   let agentId = parseSubagentName(fileName);
-  let agentName = agentId;
+  let agentName = parentAgentNames.get(agentId) ?? agentId;
   let inputTokens = 0;
   let outputTokens = 0;
   let cacheReadTokens = 0;
@@ -138,7 +218,7 @@ async function parseSubagentFile(filePath: string, fileName: string): Promise<Cl
 
     if (typeof event.agentId === "string" && event.agentId.trim()) {
       agentId = event.agentId;
-      agentName = teamMemberNames.get(agentId) ?? agentName;
+      agentName = getBetterAgentName(agentName, teamMemberNames.get(agentId) ?? parentAgentNames.get(agentId));
     }
 
     if (typeof event.agentName === "string" && event.agentName.trim()) {
@@ -168,7 +248,10 @@ async function parseSubagentFile(filePath: string, fileName: string): Promise<Cl
   };
 }
 
-async function parseSubagents(subagentsDir: string): Promise<ClaudeSubagentSummary[]> {
+async function parseSubagents(
+  subagentsDir: string,
+  parentAgentNames: Map<string, string>,
+): Promise<ClaudeSubagentSummary[]> {
   let entries: string[] = [];
   try {
     entries = await fs.readdir(subagentsDir);
@@ -182,7 +265,7 @@ async function parseSubagents(subagentsDir: string): Promise<ClaudeSubagentSumma
   }
 
   const rows = await Promise.all(
-    subagentFiles.map((entry) => parseSubagentFile(path.resolve(subagentsDir, entry), entry)),
+    subagentFiles.map((entry) => parseSubagentFile(path.resolve(subagentsDir, entry), entry, parentAgentNames)),
   );
 
   const aggregates = new Map<string, RawSubagentAggregate>();
@@ -317,6 +400,8 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
 
   const stream = createReadStream(filePath, { encoding: "utf8" });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  const pendingAgentDescriptions = new Map<string, string>();
+  const parentAgentNames = new Map<string, string>();
 
   for await (const line of rl) {
     if (!line.trim()) continue;
@@ -334,6 +419,11 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
     }
     if (eventTime) {
       lastActivityAt = eventTime;
+    }
+
+    const resolvedAgentNames = parseAgentDescriptionByIdFromEvent(event, pendingAgentDescriptions);
+    for (const [resolvedAgentId, resolvedAgentName] of resolvedAgentNames) {
+      parentAgentNames.set(resolvedAgentId, resolvedAgentName);
     }
 
     if (event.type === "user") {
@@ -357,7 +447,7 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
   }
 
   const subagentsDir = path.resolve(path.dirname(filePath), sessionId, "subagents");
-  const subagents = await parseSubagents(subagentsDir);
+  const subagents = await parseSubagents(subagentsDir, parentAgentNames);
   const subagentCount = subagents.length;
 
   const summary: ClaudeSessionSummary = {
