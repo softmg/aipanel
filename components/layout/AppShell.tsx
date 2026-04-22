@@ -47,6 +47,7 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
   const [hasUpdates, setHasUpdates] = useState(false);
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>("default");
   const seenNotificationKeysRef = useRef<Set<string>>(new Set());
   const sentAtRef = useRef<number[]>([]);
@@ -141,8 +142,33 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
         />
       ) : null}
       <div className="flex h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-        <div className="flex h-screen w-80 shrink-0 flex-col overflow-hidden">
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-zinc-200 px-3 py-2 dark:border-zinc-800">
+        <div
+          className={`flex h-screen shrink-0 flex-col overflow-hidden transition-[width] md:w-80 ${
+            mobileSidebarOpen ? "w-80" : "w-16"
+          }`}
+        >
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-b border-zinc-200 px-2 py-2 dark:border-zinc-800 md:px-3">
+            <button
+              type="button"
+              onClick={() => setMobileSidebarOpen((value) => !value)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded border border-zinc-300 text-sm hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 dark:hover:bg-zinc-800 md:hidden"
+              aria-label={mobileSidebarOpen ? "Collapse projects sidebar" : "Expand projects sidebar"}
+              aria-expanded={mobileSidebarOpen}
+              aria-controls="projects-sidebar"
+            >
+              <svg
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
+                <path d="M3 5h14" />
+                <path d="M3 10h14" />
+                <path d="M3 15h14" />
+              </svg>
+            </button>
             <button
               type="button"
               onClick={requestPushPermission}
@@ -176,27 +202,37 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
             <button
               type="button"
               onClick={() => setDrawerOpen((value) => !value)}
-              className="rounded border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              className={`relative rounded border border-zinc-300 text-sm hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 dark:hover:bg-zinc-800 ${
+                mobileSidebarOpen
+                  ? "inline-flex min-w-0 flex-1 items-center px-3 py-1.5 md:flex-none"
+                  : "inline-flex h-9 w-9 items-center justify-center md:h-auto md:w-auto md:px-3 md:py-1.5"
+              }`}
               aria-label={drawerOpen ? "Close notifications" : "Open notifications"}
               aria-haspopup="dialog"
               aria-expanded={drawerOpen}
               aria-controls="notifications-panel"
             >
-              <span className="inline-flex items-center gap-2">
+              <span className={`inline-flex items-center gap-2 ${mobileSidebarOpen ? "min-w-0" : ""}`}>
                 <svg
                   viewBox="0 0 20 20"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.7"
-                  className="h-4 w-4"
+                  className="h-4 w-4 shrink-0"
                   aria-hidden="true"
                 >
                   <path d="M10 3.5a4 4 0 0 0-4 4V9c0 .86-.28 1.7-.8 2.4L4 13h12l-1.2-1.6A4 4 0 0 1 14 9V7.5a4 4 0 0 0-4-4Z" />
                   <path d="M8 14a2 2 0 0 0 4 0" />
                 </svg>
-                Notifications
+                <span className={`${mobileSidebarOpen ? "truncate" : "hidden"} md:inline`}>Notifications</span>
                 {notifications.length > 0 ? (
-                  <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
+                  <span
+                    className={`inline-flex items-center justify-center bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300 ${
+                      mobileSidebarOpen
+                        ? "shrink-0 rounded px-1.5 py-0.5 text-xs"
+                        : "absolute -right-1 -top-1 h-4 min-w-4 rounded-full px-1 text-[10px] leading-none md:static md:h-auto md:min-w-0 md:rounded md:px-1.5 md:py-0.5 md:text-xs md:leading-normal"
+                    }`}
+                  >
                     {notifications.length}
                   </span>
                 ) : null}
@@ -208,11 +244,13 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
             projects={projects}
             activeSlug={activeSlug}
             pendingSlug={isPending ? pendingSlug : null}
+            collapsed={!mobileSidebarOpen}
             onProjectSelect={(slug) => {
               if (slug === activeSlug) {
                 return;
               }
 
+              setMobileSidebarOpen(false);
               setPendingSlug(slug);
               startTransition(() => {
                 router.push(`/projects/${slug}`);
