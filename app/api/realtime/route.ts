@@ -1,11 +1,47 @@
 import { z } from "zod";
 import { getProjectCards, getProjectDetail, getProjectNotifications } from "@/lib/services/aggregator";
+import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 
 export const dynamic = "force-dynamic";
 
 const searchSchema = z.object({
   activeSlug: z.string().regex(/^[a-z0-9-]+$/).optional(),
 });
+
+type RealtimeNotificationPayload = Pick<
+  ClaudeNotification,
+  "id" | "kind" | "title" | "createdAt" | "projectSlug" | "projectLabel" | "sessionLabel" | "status"
+>;
+
+function toRealtimeNotificationPayload(notification: ClaudeNotification): RealtimeNotificationPayload {
+  return {
+    id: notification.id,
+    kind: notification.kind,
+    title: notification.title,
+    createdAt: notification.createdAt,
+    projectSlug: notification.projectSlug,
+    projectLabel: notification.projectLabel,
+    sessionLabel: notification.sessionLabel,
+    status: notification.status,
+  };
+}
+
+function emitNewNotifications(
+  payload: RealtimeNotificationPayload[],
+  knownIds: Set<string>,
+  write: (chunk: string) => void,
+): Set<string> {
+  const currentIds = new Set(payload.map((item) => item.id));
+
+  if (knownIds.size > 0) {
+    const newItems = payload.filter((item) => !knownIds.has(item.id));
+    if (newItems.length > 0) {
+      write(`event: notification\ndata: ${JSON.stringify({ items: newItems })}\n\n`);
+    }
+  }
+
+  return currentIds;
+}
 
 function buildSignature(
   cards: Awaited<ReturnType<typeof getProjectCards>>,
@@ -19,6 +55,7 @@ function buildSignature(
       totalInputTokens: project.totalInputTokens,
       totalOutputTokens: project.totalOutputTokens,
       totalCacheReadTokens: project.totalCacheReadTokens,
+      usageSplit: project.usageSplit,
       beadsCounts: project.beadsCounts,
     })),
     detail: detail
@@ -29,8 +66,7 @@ function buildSignature(
             id: session.sessionId,
             lastActivityAt: session.lastActivityAt,
             title: session.title,
-            inputTokens: session.usage.inputTokens,
-            outputTokens: session.usage.outputTokens,
+            usageSplit: session.usageSplit,
             cacheReadTokens: session.usage.cacheReadTokens,
             userPromptCount: session.userPromptCount,
           })),
@@ -68,6 +104,7 @@ export async function GET(request: Request) {
       let closed = false;
       let inFlight = false;
       let lastSignature = "";
+      let lastNotificationIds = new Set<string>();
 
       const write = (chunk: string) => {
         if (!closed) {
@@ -87,17 +124,13 @@ export async function GET(request: Request) {
             activeSlug ? getProjectDetail(activeSlug) : Promise.resolve(null),
             activeSlug ? getProjectNotifications(activeSlug) : Promise.resolve([]),
           ]);
-          const signature =
-            buildSignature(cards, detail) +
-            JSON.stringify(
-              notifications.map((item: (typeof notifications)[number]) => ({
-                id: item.id,
-                createdAt: item.createdAt,
-                kind: item.kind,
-                title: item.title,
-                status: item.status,
-              })),
-            );
+
+          const notificationPayload = notifications.map(toRealtimeNotificationPayload);
+          const signature = buildSignature(cards, detail) + JSON.stringify(notificationPayload);
+
+          if (activeSlug) {
+            lastNotificationIds = emitNewNotifications(notificationPayload, lastNotificationIds, write);
+          }
 
           if (lastSignature && signature !== lastSignature) {
             write(`event: update\ndata: ${JSON.stringify({ updatedAt: new Date().toISOString() })}\n\n`);

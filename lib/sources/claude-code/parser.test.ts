@@ -140,6 +140,11 @@ describe("claude-code parser", () => {
       expect(summary.title).toContain("если сессия запущена больше 1 минуты");
       expect(summary.title).not.toContain("command-name");
       expect(summary.title).not.toContain("agent-teams-sm:team-feature");
+      expect(summary.usageSplit).toEqual({
+        main: { inputTokens: 0, outputTokens: 0 },
+        agents: { inputTokens: 0, outputTokens: 0 },
+        total: { inputTokens: 0, outputTokens: 0 },
+      });
     } finally {
       await fs.rm(tempRoot, { recursive: true, force: true });
     }
@@ -204,6 +209,11 @@ describe("claude-code parser", () => {
           cacheReadTokens: 33,
           cacheCreationTokens: 44,
         },
+      });
+      expect(summary.usageSplit).toEqual({
+        main: { inputTokens: 0, outputTokens: 0 },
+        agents: { inputTokens: 11, outputTokens: 22 },
+        total: { inputTokens: 11, outputTokens: 22 },
       });
     } finally {
       await fs.rm(tempRoot, { recursive: true, force: true });
@@ -337,7 +347,8 @@ describe("claude-code parser", () => {
                 id: "call-agent-2",
                 name: "Agent",
                 input: {
-                  description: "coder-token-split",
+                  description: "Implement token split feature",
+                  name: "coder-token-split",
                   prompt: "You are coder-1. Claim task #1 and implement token split.",
                 },
               },
@@ -386,6 +397,124 @@ describe("claude-code parser", () => {
         agentName: "coder-token-split",
       });
     } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("includes launched team agents that do not have subagent log files", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
+    const sessionPath = path.join(tempRoot, "session-7.jsonl");
+
+    await fs.writeFile(
+      sessionPath,
+      [
+        JSON.stringify({
+          type: "assistant",
+          timestamp: "2026-04-21T10:00:00.000Z",
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "call-agent-3",
+                name: "Agent",
+                input: {
+                  description: "Implement token split feature",
+                  name: "coder-token-split",
+                  prompt: "Implement the feature.",
+                },
+              },
+            ],
+          },
+        }),
+        JSON.stringify({
+          type: "user",
+          timestamp: "2026-04-21T10:00:01.000Z",
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "call-agent-3",
+                content: [
+                  {
+                    type: "text",
+                    text: "Spawned successfully.\nagent_id: coder-token-split@token-split-feature\nname: coder-token-split",
+                  },
+                ],
+              },
+            ],
+          },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const summary = await parseSessionFile(sessionPath);
+      expect(summary.subagents).toEqual([
+        {
+          agentId: "coder-token-split@token-split-feature",
+          agentName: "coder-token-split",
+          turns: 0,
+          lastActivityAt: null,
+          usage: {
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheReadTokens: 0,
+            cacheCreationTokens: 0,
+          },
+        },
+      ]);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("includes team lead from team config for lead sessions", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
+    const home = path.join(tempRoot, "home");
+    const projectRoot = path.join(tempRoot, "project");
+    const teamsDir = path.join(home, ".claude", "teams", "token-split-feature");
+    const sessionPath = path.join(projectRoot, "lead-session.jsonl");
+    const previousHome = process.env.HOME;
+
+    await fs.mkdir(teamsDir, { recursive: true });
+    await fs.mkdir(projectRoot, { recursive: true });
+    process.env.HOME = home;
+    clearClaudeCodeCache();
+
+    await fs.writeFile(
+      path.join(teamsDir, "config.json"),
+      JSON.stringify({
+        name: "token-split-feature",
+        leadSessionId: "lead-session",
+        members: [
+          { agentId: "team-lead@token-split-feature", name: "team-lead" },
+          { agentId: "coder-token-split@token-split-feature", name: "coder-token-split" },
+        ],
+      }),
+      "utf8",
+    );
+    await fs.writeFile(
+      sessionPath,
+      JSON.stringify({
+        type: "user",
+        timestamp: "2026-04-21T10:00:00.000Z",
+        teamName: "token-split-feature",
+        message: { content: "Implement token split" },
+      }),
+      "utf8",
+    );
+
+    try {
+      const summary = await parseSessionFile(sessionPath);
+      expect(summary.subagents?.map((agent) => agent.agentName)).toEqual(["team-lead", "coder-token-split"]);
+    } finally {
+      if (previousHome) {
+        process.env.HOME = previousHome;
+      } else {
+        delete process.env.HOME;
+      }
+      clearClaudeCodeCache();
       await fs.rm(tempRoot, { recursive: true, force: true });
     }
   });

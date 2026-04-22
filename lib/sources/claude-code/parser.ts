@@ -3,7 +3,12 @@ import { createReadStream } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
-import type { ClaudeSessionSummary, ClaudeSubagentSummary, TokenUsage } from "@/lib/sources/claude-code/types";
+import type {
+  ClaudeSessionSummary,
+  ClaudeSubagentSummary,
+  TokenUsage,
+  TokenUsageSplit,
+} from "@/lib/sources/claude-code/types";
 
 type RawUsage = {
   input_tokens?: number;
@@ -21,6 +26,7 @@ type RawContentItem = {
   content?: string | Array<{ type?: string; text?: string }>;
   input?: {
     description?: unknown;
+    name?: unknown;
     prompt?: unknown;
   };
 };
@@ -31,6 +37,7 @@ type RawEvent = {
   sessionId?: string;
   agentId?: string;
   agentName?: string;
+  teamName?: string;
   message?: {
     usage?: RawUsage;
     content?: string | RawContentItem[];
@@ -52,6 +59,13 @@ function parseSubagentName(fileName: string): string {
 const PROMPT_AGENT_NAME_PATTERN =
   /\b(coder-\d+|tech-lead|security-reviewer|logic-reviewer|quality-reviewer|unified-reviewer|architect-(?:frontend|backend|systems)|browser-verifier|ci-verifier|spec-verifier|risk-tester|codebase-researcher|reference-researcher)\b/i;
 const AGENT_RESULT_ID_PATTERN = /agentId:\s*([\w-]+)/;
+const TEAM_AGENT_ID_PATTERN = /agent_id:\s*([\w-]+@[\w-]+)/;
+const EMPTY_USAGE: TokenUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheCreationTokens: 0,
+};
 
 function extractTextContent(content: NonNullable<RawEvent["message"]>["content"]): string {
   if (typeof content === "string") {
@@ -108,8 +122,11 @@ function parseAgentDescriptionByIdFromEvent(
   const content = Array.isArray(event.message?.content) ? event.message.content : [];
 
   for (const item of content) {
-    if (item.type === "tool_use" && item.name === "Agent" && typeof item.input?.description === "string") {
-      pendingAgentDescriptions.set(item.id ?? "", item.input.description);
+    if (item.type === "tool_use" && item.name === "Agent") {
+      const displayName = typeof item.input?.name === "string" ? item.input.name : item.input?.description;
+      if (typeof displayName === "string") {
+        pendingAgentDescriptions.set(item.id ?? "", displayName);
+      }
       continue;
     }
 
@@ -123,7 +140,7 @@ function parseAgentDescriptionByIdFromEvent(
     }
 
     const text = extractTextContent([item]);
-    const agentId = text.match(AGENT_RESULT_ID_PATTERN)?.[1];
+    const agentId = text.match(AGENT_RESULT_ID_PATTERN)?.[1] ?? text.match(TEAM_AGENT_ID_PATTERN)?.[1];
     if (agentId) {
       descriptions.set(agentId, description);
     }
@@ -133,17 +150,35 @@ function parseAgentDescriptionByIdFromEvent(
   return descriptions;
 }
 
-const teamMemberNamesPromise = loadTeamMemberNames();
+function createLaunchedSubagent(agentId: string, agentName: string): ClaudeSubagentSummary {
+  return {
+    agentId,
+    agentName,
+    turns: 0,
+    lastActivityAt: null,
+    usage: { ...EMPTY_USAGE },
+  };
+}
 
-async function loadTeamMemberNames(): Promise<Map<string, string>> {
-  const names = new Map<string, string>();
+type TeamMemberIndex = {
+  namesById: Map<string, string>;
+  membersByTeam: Map<string, Map<string, string>>;
+  membersByLeadSessionId: Map<string, Map<string, string>>;
+};
+
+async function loadTeamMemberIndex(): Promise<TeamMemberIndex> {
+  const index: TeamMemberIndex = {
+    namesById: new Map<string, string>(),
+    membersByTeam: new Map<string, Map<string, string>>(),
+    membersByLeadSessionId: new Map<string, Map<string, string>>(),
+  };
   const teamsDir = path.join(os.homedir(), ".claude", "teams");
 
   let teamDirs: string[] = [];
   try {
     teamDirs = await fs.readdir(teamsDir);
   } catch {
-    return names;
+    return index;
   }
 
   await Promise.all(
@@ -156,29 +191,65 @@ async function loadTeamMemberNames(): Promise<Map<string, string>> {
         return;
       }
 
-      let parsed: { members?: Array<{ agentId?: string; name?: string }> };
+      let parsed: {
+        name?: string;
+        leadSessionId?: string;
+        members?: Array<{ agentId?: string; name?: string }>;
+      };
       try {
-        parsed = JSON.parse(raw) as { members?: Array<{ agentId?: string; name?: string }> };
+        parsed = JSON.parse(raw) as {
+          name?: string;
+          leadSessionId?: string;
+          members?: Array<{ agentId?: string; name?: string }>;
+        };
       } catch {
         return;
       }
 
+      const teamMembers = new Map<string, string>();
       for (const member of parsed.members ?? []) {
         if (!member.agentId || !member.name) {
           continue;
         }
-        names.set(member.agentId, member.name);
+        index.namesById.set(member.agentId, member.name);
+        teamMembers.set(member.agentId, member.name);
+      }
+
+      if (parsed.name && teamMembers.size > 0) {
+        index.membersByTeam.set(parsed.name, new Map(teamMembers));
+      }
+      if (parsed.leadSessionId && teamMembers.size > 0) {
+        index.membersByLeadSessionId.set(parsed.leadSessionId, new Map(teamMembers));
       }
     }),
   );
 
-  return names;
+  return index;
+}
+
+function mergeTeamRoster(
+  subagents: ClaudeSubagentSummary[],
+  members: Map<string, string> | undefined,
+): ClaudeSubagentSummary[] {
+  if (!members || members.size === 0) {
+    return subagents;
+  }
+
+  const presentIds = new Set(subagents.map((subagent) => subagent.agentId));
+  const next = [...subagents];
+  for (const [agentId, agentName] of members) {
+    if (!presentIds.has(agentId)) {
+      next.push(createLaunchedSubagent(agentId, agentName));
+    }
+  }
+  return next;
 }
 
 async function parseSubagentFile(
   filePath: string,
   fileName: string,
   parentAgentNames: Map<string, string>,
+  teamMemberIndex: TeamMemberIndex,
 ): Promise<ClaudeSubagentSummary> {
   let turns = 0;
   let lastActivityAt: string | null = null;
@@ -191,8 +262,6 @@ async function parseSubagentFile(
 
   const stream = createReadStream(filePath, { encoding: "utf8" });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-
-  const teamMemberNames = await teamMemberNamesPromise;
 
   for await (const line of rl) {
     if (!line.trim()) {
@@ -222,7 +291,7 @@ async function parseSubagentFile(
 
     if (typeof event.agentId === "string" && event.agentId.trim()) {
       agentId = event.agentId;
-      agentName = getBetterAgentName(agentName, teamMemberNames.get(agentId) ?? parentAgentNames.get(agentId), agentId);
+      agentName = getBetterAgentName(agentName, teamMemberIndex.namesById.get(agentId) ?? parentAgentNames.get(agentId), agentId);
     }
 
     if (typeof event.agentName === "string" && event.agentName.trim()) {
@@ -255,6 +324,7 @@ async function parseSubagentFile(
 async function parseSubagents(
   subagentsDir: string,
   parentAgentNames: Map<string, string>,
+  teamMemberIndex: TeamMemberIndex,
 ): Promise<ClaudeSubagentSummary[]> {
   let entries: string[] = [];
   try {
@@ -269,7 +339,9 @@ async function parseSubagents(
   }
 
   const rows = await Promise.all(
-    subagentFiles.map((entry) => parseSubagentFile(path.resolve(subagentsDir, entry), entry, parentAgentNames)),
+    subagentFiles.map((entry) =>
+      parseSubagentFile(path.resolve(subagentsDir, entry), entry, parentAgentNames, teamMemberIndex),
+    ),
   );
 
   const aggregates = new Map<string, RawSubagentAggregate>();
@@ -326,6 +398,30 @@ const cache = new Map<string, { mtimeMs: number; value: ClaudeSessionSummary }>(
 
 function parseUsage(event: RawEvent): RawUsage {
   return event.message?.usage ?? {};
+}
+
+function getTokenUsageSplit(mainUsage: TokenUsage, subagents: ClaudeSubagentSummary[]): TokenUsageSplit {
+  const agents = subagents.reduce(
+    (sum, agent) => {
+      return {
+        inputTokens: sum.inputTokens + agent.usage.inputTokens,
+        outputTokens: sum.outputTokens + agent.usage.outputTokens,
+      };
+    },
+    { inputTokens: 0, outputTokens: 0 },
+  );
+
+  return {
+    main: {
+      inputTokens: mainUsage.inputTokens,
+      outputTokens: mainUsage.outputTokens,
+    },
+    agents,
+    total: {
+      inputTokens: mainUsage.inputTokens + agents.inputTokens,
+      outputTokens: mainUsage.outputTokens + agents.outputTokens,
+    },
+  };
 }
 
 function asIso(value: string | undefined): string | null {
@@ -402,6 +498,7 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
   let outputTokens = 0;
   let cacheReadTokens = 0;
   let cacheCreationTokens = 0;
+  let teamName: string | undefined;
 
   const stream = createReadStream(filePath, { encoding: "utf8" });
   const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
@@ -416,6 +513,10 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
       event = JSON.parse(line) as RawEvent;
     } catch {
       continue;
+    }
+
+    if (event.teamName?.trim()) {
+      teamName = event.teamName;
     }
 
     const eventTime = asIso(event.timestamp);
@@ -451,21 +552,32 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
     }
   }
 
+  const teamMemberIndex = await loadTeamMemberIndex();
   const subagentsDir = path.resolve(path.dirname(filePath), sessionId, "subagents");
-  const subagents = await parseSubagents(subagentsDir, parentAgentNames);
+  let subagents = await parseSubagents(subagentsDir, parentAgentNames, teamMemberIndex);
+  const presentSubagentIds = new Set(subagents.map((subagent) => subagent.agentId));
+  for (const [agentId, agentName] of parentAgentNames) {
+    if (!presentSubagentIds.has(agentId)) {
+      subagents.push(createLaunchedSubagent(agentId, agentName));
+    }
+  }
+  subagents = mergeTeamRoster(subagents, teamMemberIndex.membersByLeadSessionId.get(sessionId));
+  subagents = mergeTeamRoster(subagents, teamName ? teamMemberIndex.membersByTeam.get(teamName) : undefined);
   const subagentCount = subagents.length;
+  const usage: TokenUsage = {
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+  };
 
   const summary: ClaudeSessionSummary = {
     sessionId,
     title,
     startedAt,
     lastActivityAt: lastActivityAt ?? stat.mtime.toISOString(),
-    usage: {
-      inputTokens,
-      outputTokens,
-      cacheReadTokens,
-      cacheCreationTokens,
-    },
+    usage,
+    usageSplit: getTokenUsageSplit(usage, subagents),
     userPromptCount,
     assistantTurnCount,
     subagentCount,

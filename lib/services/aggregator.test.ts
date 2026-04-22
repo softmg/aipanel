@@ -10,6 +10,7 @@ import {
   getProjectSessionObservations,
 } from "@/lib/services/aggregator";
 import * as claudeCodeSource from "@/lib/sources/claude-code";
+import type { ClaudeSessionSummary } from "@/lib/sources/claude-code/types";
 import * as claudeMemSource from "@/lib/sources/claude-mem";
 
 const originalEnv = process.env.AIPANEL_CONFIG;
@@ -38,6 +39,29 @@ beforeEach(() => {
   vi.restoreAllMocks();
 });
 
+function createSession(overrides: Partial<ClaudeSessionSummary> = {}): ClaudeSessionSummary {
+  return {
+    sessionId: "s-1",
+    startedAt: "2026-04-21T09:00:00.000Z",
+    lastActivityAt: "2026-04-21T09:10:00.000Z",
+    usage: {
+      inputTokens: 1,
+      outputTokens: 1,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+    },
+    usageSplit: {
+      main: { inputTokens: 1, outputTokens: 1 },
+      agents: { inputTokens: 0, outputTokens: 0 },
+      total: { inputTokens: 1, outputTokens: 1 },
+    },
+    userPromptCount: 1,
+    assistantTurnCount: 1,
+    subagentCount: 0,
+    ...overrides,
+  };
+}
+
 describe("aggregator", () => {
   it("returns empty cards list when config path points to missing file", async () => {
     process.env.AIPANEL_CONFIG = "/tmp/definitely-missing-aipanel-config.json";
@@ -49,38 +73,20 @@ describe("aggregator", () => {
     vi.spyOn(claudeCodeSource, "listSessionsForProject").mockImplementation(async (projectPath: string) => {
       if (projectPath.endsWith("/alpha")) {
         return [
-          {
+          createSession({
             sessionId: "s-alpha",
             startedAt: "2026-01-01T00:00:00.000Z",
             lastActivityAt: "2026-01-01T00:00:00.000Z",
-            usage: {
-              inputTokens: 1,
-              outputTokens: 1,
-              cacheReadTokens: 0,
-              cacheCreationTokens: 0,
-            },
-            userPromptCount: 1,
-            assistantTurnCount: 1,
-            subagentCount: 0,
-          },
+          }),
         ];
       }
       if (projectPath.endsWith("/beta")) {
         return [
-          {
+          createSession({
             sessionId: "s-beta",
             startedAt: "2026-02-01T00:00:00.000Z",
             lastActivityAt: "2026-02-01T00:00:00.000Z",
-            usage: {
-              inputTokens: 1,
-              outputTokens: 1,
-              cacheReadTokens: 0,
-              cacheCreationTokens: 0,
-            },
-            userPromptCount: 1,
-            assistantTurnCount: 1,
-            subagentCount: 0,
-          },
+          }),
         ];
       }
       return [];
@@ -117,21 +123,7 @@ describe("aggregator", () => {
 
   it("prefers mem title fields and falls back to session title", async () => {
     vi.spyOn(claudeCodeSource, "listSessionsForProject").mockResolvedValue([
-      {
-        sessionId: "s-1",
-        title: "Claude log title",
-        startedAt: "2026-04-21T09:00:00.000Z",
-        lastActivityAt: "2026-04-21T09:10:00.000Z",
-        usage: {
-          inputTokens: 1,
-          outputTokens: 1,
-          cacheReadTokens: 0,
-          cacheCreationTokens: 0,
-        },
-        userPromptCount: 1,
-        assistantTurnCount: 1,
-        subagentCount: 0,
-      },
+      createSession({ title: "Claude log title" }),
     ]);
 
     vi.spyOn(claudeMemSource, "listSessionsForProject").mockResolvedValue([
@@ -228,11 +220,105 @@ describe("aggregator", () => {
             kind: "permission",
             title: "Run command",
             details: "Bash",
+            source: "log",
           },
         ]);
       },
     );
   });
+
+  it("adds project metadata to derived threshold notifications", async () => {
+    vi.spyOn(claudeCodeSource, "listSessionsForProject").mockResolvedValue([
+      createSession({
+        sessionId: "s-threshold",
+        startedAt: "2026-04-21T09:00:00.000Z",
+        usageSplit: {
+          main: { inputTokens: 500_000, outputTokens: 10 },
+          agents: { inputTokens: 123_456, outputTokens: 20 },
+          total: { inputTokens: 623_456, outputTokens: 30 },
+        },
+      }),
+    ]);
+    vi.spyOn(claudeCodeSource, "listNotificationsForProject").mockResolvedValue([]);
+
+    await withTempConfig(
+      JSON.stringify({
+        projects: [{ name: "Demo", path: "/tmp/demo" }],
+      }),
+      async () => {
+        const notifications = await getProjectNotifications("demo");
+        expect(notifications).toHaveLength(1);
+        expect(notifications[0]).toMatchObject({
+          sessionId: "s-threshold",
+          kind: "alert",
+          source: "derived",
+          projectSlug: "demo",
+          projectLabel: "Demo",
+        });
+      },
+    );
+  });
+
+  it("builds threshold alerts from main input tokens only", async () => {
+    vi.spyOn(claudeCodeSource, "listSessionsForProject").mockResolvedValue([
+      createSession({
+        sessionId: "s-agents-heavy",
+        startedAt: "2026-04-21T09:00:00.000Z",
+        usageSplit: {
+          main: { inputTokens: 499_999, outputTokens: 10 },
+          agents: { inputTokens: 900_000, outputTokens: 20 },
+          total: { inputTokens: 1_399_999, outputTokens: 30 },
+        },
+      }),
+    ]);
+    vi.spyOn(claudeCodeSource, "listNotificationsForProject").mockResolvedValue([]);
+
+    await withTempConfig(
+      JSON.stringify({
+        projects: [{ name: "Demo", path: "/tmp/demo" }],
+      }),
+      async () => {
+        const notifications = await getProjectNotifications("demo");
+        expect(notifications).toEqual([]);
+      },
+    );
+  });
+
+  it("preserves project metadata for derived threshold notifications in project detail", async () => {
+    vi.spyOn(claudeCodeSource, "listSessionsForProject").mockResolvedValue([
+      createSession({
+        sessionId: "s-detail-threshold",
+        startedAt: "2026-04-21T09:00:00.000Z",
+        usageSplit: {
+          main: { inputTokens: 500_000, outputTokens: 10 },
+          agents: { inputTokens: 123_456, outputTokens: 20 },
+          total: { inputTokens: 623_456, outputTokens: 30 },
+        },
+      }),
+    ]);
+    vi.spyOn(claudeCodeSource, "listNotificationsForProject").mockResolvedValue([]);
+
+    await withTempConfig(
+      JSON.stringify({
+        projects: [{ name: "Demo", path: "/tmp/demo" }],
+      }),
+      async () => {
+        const detail = await getProjectDetail("demo");
+        expect(detail?.notifications).toHaveLength(1);
+        expect(detail?.notifications[0]).toMatchObject({
+          sessionId: "s-detail-threshold",
+          kind: "alert",
+          source: "derived",
+          projectSlug: "demo",
+          projectLabel: "Demo",
+        });
+      },
+    );
+  });
+
+
+
+
 
   it("returns null observations when session does not belong to project", async () => {
     vi.spyOn(claudeMemSource, "isSessionInProject").mockResolvedValue(false);

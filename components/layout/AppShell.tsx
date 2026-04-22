@@ -33,6 +33,9 @@ function getNotificationBody(item: RealtimeNotificationItem): string {
   if (item.kind === "task" && item.status) {
     return `${project} · Task ${item.status}`;
   }
+  if (item.kind === "alert") {
+    return `${project} · ${item.title}`;
+  }
   return `${project} · ${item.sessionLabel}`;
 }
 

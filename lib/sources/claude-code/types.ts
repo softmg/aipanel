@@ -5,6 +5,17 @@ export type TokenUsage = {
   cacheCreationTokens: number;
 };
 
+export type InOutTokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+};
+
+export type TokenUsageSplit = {
+  main: InOutTokenUsage;
+  agents: InOutTokenUsage;
+  total: InOutTokenUsage;
+};
+
 export type ClaudeSubagentSummary = {
   agentId: string;
   agentName: string;
@@ -19,6 +30,7 @@ export type ClaudeSessionSummary = {
   startedAt: string | null;
   lastActivityAt: string | null;
   usage: TokenUsage;
+  usageSplit: TokenUsageSplit;
   userPromptCount: number;
   assistantTurnCount: number;
   subagentCount: number;
@@ -27,7 +39,7 @@ export type ClaudeSessionSummary = {
 
 export type ClaudeSessionDetail = ClaudeSessionSummary;
 
-export type ClaudeNotificationKind = "question" | "permission" | "task";
+export type ClaudeNotificationKind = "question" | "permission" | "task" | "alert";
 
 export type ClaudeNotification = {
   id: string;
@@ -40,4 +52,5 @@ export type ClaudeNotification = {
   title: string;
   details?: string;
   status?: string;
+  source?: "log" | "derived";
 };

@@ -13,6 +13,7 @@ import {
   listNotificationsForProject,
   listSessionsForProject as listClaudeSessions,
 } from "@/lib/sources/claude-code";
+import { mergeNotificationsWithMainSessionThresholds } from "@/lib/sources/claude-code/notifications";
 import type { ProjectCard, ProjectDetail } from "@/lib/services/types";
 
 type CachedSessions = {
@@ -54,6 +55,17 @@ function latestIso(values: Array<string | null>): string | null {
   return new Date(Math.max(...valid)).toISOString();
 }
 
+function withProjectMetadata<T extends { projectSlug?: string; projectLabel?: string }>(
+  notifications: T[],
+  project: { slug: string; name: string },
+): T[] {
+  return notifications.map((notification) => ({
+    ...notification,
+    projectSlug: project.slug,
+    projectLabel: project.name,
+  }));
+}
+
 export async function getProjectCards(options: { includeBeads?: boolean } = {}): Promise<ProjectCard[]> {
   const includeBeads = options.includeBeads ?? true;
   const projects = await loadProjectsConfig();
@@ -66,15 +78,31 @@ export async function getProjectCards(options: { includeBeads?: boolean } = {}):
         : Promise.resolve([] as Array<{ status: string }>);
       const [sessions, beads] = await Promise.all([sessionsPromise, beadsPromise]);
 
+      const usageSplit = {
+        main: {
+          inputTokens: sessions.reduce((sum, session) => sum + session.usageSplit.main.inputTokens, 0),
+          outputTokens: sessions.reduce((sum, session) => sum + session.usageSplit.main.outputTokens, 0),
+        },
+        agents: {
+          inputTokens: sessions.reduce((sum, session) => sum + session.usageSplit.agents.inputTokens, 0),
+          outputTokens: sessions.reduce((sum, session) => sum + session.usageSplit.agents.outputTokens, 0),
+        },
+        total: {
+          inputTokens: sessions.reduce((sum, session) => sum + session.usageSplit.total.inputTokens, 0),
+          outputTokens: sessions.reduce((sum, session) => sum + session.usageSplit.total.outputTokens, 0),
+        },
+      };
+
       return {
         slug: project.slug,
         name: project.name,
         absolutePath: project.absolutePath,
         lastActivityAt: latestIso(sessions.map((session) => session.lastActivityAt)),
         sessionCount: sessions.length,
-        totalInputTokens: sessions.reduce((sum, session) => sum + session.usage.inputTokens, 0),
-        totalOutputTokens: sessions.reduce((sum, session) => sum + session.usage.outputTokens, 0),
+        totalInputTokens: usageSplit.total.inputTokens,
+        totalOutputTokens: usageSplit.total.outputTokens,
         totalCacheReadTokens: sessions.reduce((sum, session) => sum + session.usage.cacheReadTokens, 0),
+        usageSplit,
         beadsCounts: countBeads(beads),
       };
     }),
@@ -145,11 +173,18 @@ export async function getProjectDetail(slug: string): Promise<ProjectDetail | nu
     listNotificationsForProject(project.absolutePath).catch(() => []),
   ]);
 
-  const notificationsWithProject = notifications.map((notification) => ({
-    ...notification,
-    projectSlug: project.slug,
-    projectLabel: project.name,
-  }));
+  const notificationsWithProject = withProjectMetadata(
+    mergeNotificationsWithMainSessionThresholds(
+      notifications,
+      sessions.map((session) => ({
+        sessionId: session.sessionId,
+        title: session.title,
+        startedAt: session.startedAt,
+        mainInputTokens: session.usageSplit.main.inputTokens,
+      })),
+    ),
+    project,
+  );
 
   const warnings = [...sessionWarnings];
   if (beads === null) {
@@ -204,12 +239,23 @@ export async function getProjectNotifications(slug: string) {
     return [];
   }
 
-  const notifications = await listNotificationsForProject(project.absolutePath);
-  return notifications.map((notification) => ({
-    ...notification,
-    projectSlug: project.slug,
-    projectLabel: project.name,
-  }));
+  const [{ sessions }, notifications] = await Promise.all([
+    getSessionsForProject(project),
+    listNotificationsForProject(project.absolutePath).catch(() => []),
+  ]);
+
+  return withProjectMetadata(
+    mergeNotificationsWithMainSessionThresholds(
+      notifications,
+      sessions.map((session) => ({
+        sessionId: session.sessionId,
+        title: session.title,
+        startedAt: session.startedAt,
+        mainInputTokens: session.usageSplit.main.inputTokens,
+      })),
+    ),
+    project,
+  );
 }
 
 export function clearAggregatorCache(): void {

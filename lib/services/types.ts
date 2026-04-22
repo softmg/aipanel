@@ -1,5 +1,5 @@
 import type { BeadTask } from "@/lib/sources/beads/types";
-import type { ClaudeNotification, ClaudeSessionSummary } from "@/lib/sources/claude-code/types";
+import type { ClaudeNotification, ClaudeSessionSummary, TokenUsageSplit } from "@/lib/sources/claude-code/types";
 import type { ClaudeMemSummary } from "@/lib/sources/claude-mem/types";
 
 export type ProjectCard = {
@@ -11,6 +11,7 @@ export type ProjectCard = {
   totalInputTokens: number;
   totalOutputTokens: number;
   totalCacheReadTokens: number;
+  usageSplit: TokenUsageSplit;
   beadsCounts: {
     open: number;
     in_progress: number;

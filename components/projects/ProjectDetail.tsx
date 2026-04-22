@@ -466,7 +466,9 @@ export function ProjectDetail({ data }: Props) {
                   <tr>
                     <th className="px-3 py-2">Date</th>
                     <th className="px-3 py-2">Title</th>
-                    <th className="px-3 py-2">In/Out</th>
+                    <th className="px-3 py-2">Main In/Out</th>
+                    <th className="px-3 py-2">Agents In/Out</th>
+                    <th className="px-3 py-2">Total In/Out</th>
                     <th className="px-3 py-2">Cache Read</th>
                     <th className="px-3 py-2">Prompts</th>
                   </tr>
@@ -542,7 +544,13 @@ export function ProjectDetail({ data }: Props) {
                             ) : null}
                           </td>
                           <td className="px-3 py-2 text-xs">
-                            {formatNumber(session.usage.inputTokens)} / {formatNumber(session.usage.outputTokens)}
+                            {formatNumber(session.usageSplit.main.inputTokens)} / {formatNumber(session.usageSplit.main.outputTokens)}
+                          </td>
+                          <td className="px-3 py-2 text-xs">
+                            {formatNumber(session.usageSplit.agents.inputTokens)} / {formatNumber(session.usageSplit.agents.outputTokens)}
+                          </td>
+                          <td className="px-3 py-2 text-xs">
+                            {formatNumber(session.usageSplit.total.inputTokens)} / {formatNumber(session.usageSplit.total.outputTokens)}
                           </td>
                           <td className="px-3 py-2 text-xs">{formatNumber(session.usage.cacheReadTokens)}</td>
                           <td className="px-3 py-2 text-xs">{session.userPromptCount}</td>
@@ -552,7 +560,7 @@ export function ProjectDetail({ data }: Props) {
                             id={`session-observations-${session.sessionId}`}
                             className="border-t border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/40"
                           >
-                            <td colSpan={5} className="px-4 py-4">
+                            <td colSpan={7} className="px-4 py-4">
                               <div className="space-y-4">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <p className="text-sm font-medium">Claude-mem observations</p>

@@ -1,13 +1,25 @@
+"use client";
+
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import type { MouseEvent } from "react";
 import { formatNumber, formatRelative } from "@/lib/format";
 import type { ProjectCard } from "@/lib/services/types";
 
 type Props = {
   projects: ProjectCard[];
   activeSlug?: string;
+  pendingSlug?: string | null;
+  onProjectSelect?: (slug: string) => void;
 };
 
-export function ProjectSidebar({ projects, activeSlug }: Props) {
+const PAGE_SIZE = 3;
+
+export function ProjectSidebar({ projects, activeSlug, pendingSlug, onProjectSelect }: Props) {
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const visibleProjects = useMemo(() => projects.slice(0, visibleCount), [projects, visibleCount]);
+  const canLoadMore = visibleCount < projects.length;
+
   return (
     <nav className="w-80 border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
       <div className="border-b border-zinc-200 p-4 dark:border-zinc-800">
@@ -22,34 +34,66 @@ export function ProjectSidebar({ projects, activeSlug }: Props) {
           </div>
         ) : null}
 
-        {projects.map((project) => {
+        {visibleProjects.map((project) => {
           const active = project.slug === activeSlug;
+          const pending = project.slug === pendingSlug;
 
           return (
             <Link
               key={project.slug}
               href={`/projects/${project.slug}`}
               aria-current={active ? "page" : undefined}
+              onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+                if (!onProjectSelect) {
+                  return;
+                }
+
+                event.preventDefault();
+                onProjectSelect(project.slug);
+              }}
               className={`mb-2 block rounded-lg border p-3 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 ${
                 active
                   ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-500/10"
                   : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
               }`}
             >
-              <div className="mb-1 flex items-center justify-between">
-                <p className="truncate text-sm font-semibold">{project.name}</p>
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <p className="truncate text-sm font-semibold">{project.name}</p>
+                  {pending ? (
+                    <span
+                      aria-hidden="true"
+                      className="h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-blue-200 border-t-blue-600 dark:border-blue-500/30 dark:border-t-blue-300"
+                    />
+                  ) : null}
+                </div>
                 <p suppressHydrationWarning className="text-[11px] text-zinc-500">{formatRelative(project.lastActivityAt)}</p>
               </div>
 
               <p className="truncate text-[11px] text-zinc-500">{project.absolutePath}</p>
 
-              <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
-                <div className="rounded bg-zinc-100 px-2 py-1 dark:bg-zinc-800">
-                  in: {formatNumber(project.totalInputTokens)}
+              <div className="mt-2 space-y-2 text-[11px] text-zinc-600 dark:text-zinc-300">
+                <p>
+                  {project.sessionCount} sessions · {formatNumber(project.totalInputTokens + project.totalOutputTokens)} tokens
+                </p>
+                <div className="space-y-1 text-[10px]">
+                  <div className="rounded bg-zinc-100 px-2 py-1 dark:bg-zinc-900">
+                    <span className="font-medium">Main</span>
+                    <span className="ml-2">in: {formatNumber(project.usageSplit.main.inputTokens)}</span>
+                    <span className="ml-2">out: {formatNumber(project.usageSplit.main.outputTokens)}</span>
+                  </div>
+                  <div className="rounded bg-zinc-100 px-2 py-1 dark:bg-zinc-900">
+                    <span className="font-medium">Agents</span>
+                    <span className="ml-2">in: {formatNumber(project.usageSplit.agents.inputTokens)}</span>
+                    <span className="ml-2">out: {formatNumber(project.usageSplit.agents.outputTokens)}</span>
+                  </div>
+                  <div className="rounded bg-zinc-100 px-2 py-1 dark:bg-zinc-900">
+                    <span className="font-medium">Total</span>
+                    <span className="ml-2">in: {formatNumber(project.usageSplit.total.inputTokens)}</span>
+                    <span className="ml-2">out: {formatNumber(project.usageSplit.total.outputTokens)}</span>
+                  </div>
                 </div>
-                <div className="rounded bg-zinc-100 px-2 py-1 dark:bg-zinc-800">
-                  out: {formatNumber(project.totalOutputTokens)}
-                </div>
+                <p>cache {formatNumber(project.totalCacheReadTokens)}</p>
               </div>
 
               <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
@@ -69,6 +113,16 @@ export function ProjectSidebar({ projects, activeSlug }: Props) {
             </Link>
           );
         })}
+
+        {canLoadMore ? (
+          <button
+            type="button"
+            onClick={() => setVisibleCount((current) => current + PAGE_SIZE)}
+            className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm transition hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 dark:hover:bg-zinc-900"
+          >
+            Загрузить ещё
+          </button>
+        ) : null}
       </div>
     </nav>
   );

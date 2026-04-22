@@ -29,10 +29,26 @@ type CachedNotifications = {
   value: ClaudeNotification[];
 };
 
+export const MAIN_SESSION_INPUT_THRESHOLD = 500_000;
+
+export type MainSessionThresholdSession = {
+  sessionId: string;
+  title?: string;
+  startedAt: string | null;
+  mainInputTokens: number;
+  projectSlug?: string;
+  projectLabel?: string;
+};
+
 const notificationCache = new Map<string, CachedNotifications>();
 const PERMISSION_TOOLS = new Set(["Bash", "Edit", "Write", "NotebookEdit", "RemoteTrigger"]);
 const MAX_SESSION_FILES = 12;
 const MAX_NOTIFICATIONS = 50;
+
+function parseTimestamp(value: string): number {
+  const parsed = new Date(value).valueOf();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
 
 function asIso(value: string | undefined): string | null {
   if (!value) {
@@ -46,6 +62,11 @@ function asIso(value: string | undefined): string | null {
 function buildSessionLabel(event: RawEvent, sessionId: string): string {
   const prefix = event.agentName ?? event.teamName ?? "session";
   return `${prefix} · ${sessionId.slice(0, 8)}`;
+}
+
+function buildFallbackSessionLabel(sessionId: string, title?: string): string {
+  const trimmedTitle = title?.trim();
+  return trimmedTitle ? trimmedTitle : `session · ${sessionId.slice(0, 8)}`;
 }
 
 function parseTaskNotification(content: string): { status?: string; summary?: string } | null {
@@ -95,6 +116,7 @@ function extractNotificationsFromEvent(event: RawEvent, sessionId: string, event
             kind: "question",
             title: prompt,
             details: typeof header === "string" ? header : undefined,
+            source: "log",
           });
         });
         continue;
@@ -113,6 +135,7 @@ function extractNotificationsFromEvent(event: RawEvent, sessionId: string, event
         kind: "permission",
         title: typeof description === "string" ? description : `Claude requested ${item.name}`,
         details: item.name,
+        source: "log",
       });
     }
   }
@@ -129,11 +152,68 @@ function extractNotificationsFromEvent(event: RawEvent, sessionId: string, event
         title: task.summary ?? "Task finished",
         details: task.status ? `Status: ${task.status}` : undefined,
         status: task.status,
+        source: "log",
       });
     }
   }
 
   return notifications;
+}
+
+export function buildMainSessionThresholdNotification(
+  session: MainSessionThresholdSession,
+): ClaudeNotification | null {
+  if (session.mainInputTokens < MAIN_SESSION_INPUT_THRESHOLD) {
+    return null;
+  }
+
+  return {
+    id: `${session.sessionId}-main-input-${MAIN_SESSION_INPUT_THRESHOLD}`,
+    sessionId: session.sessionId,
+    sessionLabel: buildFallbackSessionLabel(session.sessionId, session.title),
+    projectSlug: session.projectSlug,
+    projectLabel: session.projectLabel,
+    createdAt: session.startedAt ?? new Date(0).toISOString(),
+    kind: "alert",
+    title: `Main session input reached ${MAIN_SESSION_INPUT_THRESHOLD.toLocaleString()} tokens`,
+    details: `Main input tokens: ${Math.floor(session.mainInputTokens).toLocaleString()}`,
+    status: "warning",
+    source: "derived",
+  };
+}
+
+export function mergeNotificationsWithMainSessionThresholds(
+  notifications: ClaudeNotification[],
+  sessions: MainSessionThresholdSession[],
+  options: { limit?: number } = {},
+): ClaudeNotification[] {
+  const byId = new Map<string, ClaudeNotification>();
+
+  for (const notification of notifications) {
+    byId.set(notification.id, {
+      ...notification,
+      source: notification.source ?? "log",
+    });
+  }
+
+  for (const session of sessions) {
+    const thresholdNotification = buildMainSessionThresholdNotification(session);
+    if (!thresholdNotification) {
+      continue;
+    }
+    byId.set(thresholdNotification.id, thresholdNotification);
+  }
+
+  const merged = Array.from(byId.values()).sort((left, right) => {
+    return parseTimestamp(right.createdAt) - parseTimestamp(left.createdAt);
+  });
+
+  const limit = options.limit;
+  if (typeof limit === "number") {
+    return merged.slice(0, Math.max(0, limit));
+  }
+
+  return merged;
 }
 
 export async function parseSessionNotifications(filePath: string): Promise<ClaudeNotification[]> {
@@ -167,7 +247,7 @@ export async function parseSessionNotifications(filePath: string): Promise<Claud
   }
 
   const sorted = notifications.sort((left, right) => {
-    return new Date(right.createdAt).valueOf() - new Date(left.createdAt).valueOf();
+    return parseTimestamp(right.createdAt) - parseTimestamp(left.createdAt);
   });
 
   notificationCache.set(filePath, { mtimeMs: stat.mtimeMs, value: sorted });
@@ -203,7 +283,7 @@ export async function listNotificationsForProject(projectPath: string): Promise<
 
   return notifications
     .flat()
-    .sort((left, right) => new Date(right.createdAt).valueOf() - new Date(left.createdAt).valueOf())
+    .sort((left, right) => parseTimestamp(right.createdAt) - parseTimestamp(left.createdAt))
     .slice(0, MAX_NOTIFICATIONS);
 }
 
