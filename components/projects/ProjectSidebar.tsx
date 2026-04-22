@@ -76,24 +76,6 @@ export function ProjectSidebar({ projects, activeSlug, pendingSlug, onProjectSel
                 <p>
                   {project.sessionCount} sessions · {formatNumber(project.totalInputTokens + project.totalOutputTokens)} tokens
                 </p>
-                <div className="space-y-1 text-[10px]">
-                  <div className="rounded bg-zinc-100 px-2 py-1 dark:bg-zinc-900">
-                    <span className="font-medium">Main</span>
-                    <span className="ml-2">in: {formatNumber(project.usageSplit.main.inputTokens)}</span>
-                    <span className="ml-2">out: {formatNumber(project.usageSplit.main.outputTokens)}</span>
-                  </div>
-                  <div className="rounded bg-zinc-100 px-2 py-1 dark:bg-zinc-900">
-                    <span className="font-medium">Agents</span>
-                    <span className="ml-2">in: {formatNumber(project.usageSplit.agents.inputTokens)}</span>
-                    <span className="ml-2">out: {formatNumber(project.usageSplit.agents.outputTokens)}</span>
-                  </div>
-                  <div className="rounded bg-zinc-100 px-2 py-1 dark:bg-zinc-900">
-                    <span className="font-medium">Total</span>
-                    <span className="ml-2">in: {formatNumber(project.usageSplit.total.inputTokens)}</span>
-                    <span className="ml-2">out: {formatNumber(project.usageSplit.total.outputTokens)}</span>
-                  </div>
-                </div>
-                <p>cache {formatNumber(project.totalCacheReadTokens)}</p>
               </div>
 
               <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
