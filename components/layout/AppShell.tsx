@@ -43,7 +43,7 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const realtimeEnabled = process.env.NEXT_PUBLIC_AIPANEL_REALTIME_ENABLED === "true";
-  const browserPushEnabled = process.env.NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED === "true";
+  const browserPushEnabled = process.env.NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED !== "false";
   const [hasUpdates, setHasUpdates] = useState(false);
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);

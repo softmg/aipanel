@@ -113,13 +113,13 @@ AIPANEL_ALLOWED_DEV_ORIGINS=localhost,100.89.42.77
 
 ## Browser push-уведомления (во вкладке)
 
-Для включения системных уведомлений браузера (пока вкладка aipanel открыта):
+Системные уведомления браузера включены по умолчанию. В интерфейсе нажмите `Enable push` и подтвердите permission в браузере.
+
+Чтобы явно выключить системные уведомления:
 
 ```bash
-NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED=true
+NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED=false
 ```
-
-Далее в интерфейсе нажмите `Enable push` и подтвердите permission в браузере.
 
 Ограничения:
 - работает только при открытой вкладке aipanel;
