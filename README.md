@@ -113,11 +113,12 @@ AIPANEL_ALLOWED_DEV_ORIGINS=localhost,100.89.42.77
 
 ## Browser push-уведомления (во вкладке)
 
-Системные уведомления браузера включены по умолчанию. В интерфейсе нажмите `Enable push` и подтвердите permission в браузере.
+Realtime-обновления и системные уведомления браузера включены по умолчанию. В интерфейсе нажмите `Enable push` и подтвердите permission в браузере.
 
-Чтобы явно выключить системные уведомления:
+Чтобы явно выключить realtime или системные уведомления:
 
 ```bash
+NEXT_PUBLIC_AIPANEL_REALTIME_ENABLED=false
 NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED=false
 ```
 

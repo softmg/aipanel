@@ -42,7 +42,7 @@ function getNotificationBody(item: RealtimeNotificationItem): string {
 export function AppShell({ projects, activeSlug, notifications = [], children }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const realtimeEnabled = process.env.NEXT_PUBLIC_AIPANEL_REALTIME_ENABLED === "true";
+  const realtimeEnabled = process.env.NEXT_PUBLIC_AIPANEL_REALTIME_ENABLED !== "false";
   const browserPushEnabled = process.env.NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED !== "false";
   const [hasUpdates, setHasUpdates] = useState(false);
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
@@ -52,6 +52,10 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
   const sentAtRef = useRef<number[]>([]);
 
   useEffect(() => {
+    if (seenNotificationKeysRef.current.size > 0) {
+      return;
+    }
+
     for (const notification of notifications) {
       seenNotificationKeysRef.current.add(getNotificationKey(notification));
     }
