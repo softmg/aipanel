@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { NotificationsPanel } from "@/components/layout/NotificationsPanel";
-import { RefreshButton } from "@/components/layout/RefreshButton";
 import { RealtimeUpdates, type RealtimeNotificationItem } from "@/components/layout/RealtimeUpdates";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { ProjectSidebar } from "@/components/projects/ProjectSidebar";
@@ -169,36 +168,30 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
                 <path d="M3 15h14" />
               </svg>
             </button>
-            <button
-              type="button"
-              onClick={requestPushPermission}
-              disabled={pushButtonDisabled}
-              title={pushPermissionHelp}
-              aria-label={
-                browserPushEnabled
-                  ? permission === "granted"
-                    ? "Browser push notifications enabled"
-                    : permission === "denied"
-                      ? "Browser push notifications blocked. Enable notifications in browser site settings, then reload."
-                      : "Enable browser push notifications"
-                  : "Browser push notifications disabled"
-              }
-              className={`inline-flex h-9 w-9 items-center justify-center rounded border border-zinc-300 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 ${
-                pushButtonDisabled ? "cursor-not-allowed opacity-60" : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
-              }`}
-            >
-              <svg
-                viewBox="0 0 20 20"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                className="h-4 w-4"
-                aria-hidden="true"
+            {browserPushEnabled && permission === "default" ? (
+              <button
+                type="button"
+                onClick={requestPushPermission}
+                disabled={pushButtonDisabled}
+                title={pushPermissionHelp}
+                aria-label="Enable browser push notifications"
+                className={`inline-flex h-9 w-9 items-center justify-center rounded border border-zinc-300 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 ${
+                  pushButtonDisabled ? "cursor-not-allowed opacity-60" : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                }`}
               >
-                <path d="M10 3.5a4 4 0 0 0-4 4V9c0 .86-.28 1.7-.8 2.4L4 13h12l-1.2-1.6A4 4 0 0 1 14 9V7.5a4 4 0 0 0-4-4Z" />
-                <path d="M8 14a2 2 0 0 0 4 0" />
-              </svg>
-            </button>
+                <svg
+                  viewBox="0 0 20 20"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  className="h-4 w-4"
+                  aria-hidden="true"
+                >
+                  <path d="M10 3.5a4 4 0 0 0-4 4V9c0 .86-.28 1.7-.8 2.4L4 13h12l-1.2-1.6A4 4 0 0 1 14 9V7.5a4 4 0 0 0-4-4Z" />
+                  <path d="M8 14a2 2 0 0 0 4 0" />
+                </svg>
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => setDrawerOpen((value) => !value)}
@@ -238,7 +231,6 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
                 ) : null}
               </span>
             </button>
-            <RefreshButton hasUpdates={hasUpdates} />
           </div>
           <ProjectSidebar
             projects={projects}
