@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "AI Project Status Panel",
   description: "Local dashboard for Claude sessions, token usage, and beads kanban",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
