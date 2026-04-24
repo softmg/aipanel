@@ -20,7 +20,9 @@ type OfficeTeam = {
   title: string;
   lastActivityAt: string | null;
   active: boolean;
+  lead: OfficeAgent | null;
   agents: OfficeAgent[];
+  roster: OfficeAgent[];
   totalTokens: number;
   turns: number;
 };
@@ -64,6 +66,10 @@ function getAgentTotalTokens(agent: ClaudeSubagentSummary): number {
   );
 }
 
+function isTeamLead(agent: OfficeAgent): boolean {
+  return agent.agentName === "team-lead" || agent.agentId.startsWith("team-lead@");
+}
+
 export function AgentOffice({ data, activeSessionId }: Props) {
   const teams = useMemo<OfficeTeam[]>(() => {
     return data.sessions
@@ -85,12 +91,17 @@ export function AgentOffice({ data, activeSessionId }: Props) {
           };
         });
 
+        const lead = agents.find(isTeamLead) ?? null;
+        const deskAgents = agents.filter((agent) => agent !== lead);
+
         return {
           sessionId: session.sessionId,
           title: session.title ?? session.sessionId,
           lastActivityAt: session.lastActivityAt,
           active: activeSession,
-          agents,
+          lead,
+          agents: deskAgents,
+          roster: agents,
           totalTokens: agents.reduce((sum, agent) => sum + agent.totalTokens, 0),
           turns: agents.reduce((sum, agent) => sum + agent.turns, 0),
         };
@@ -101,7 +112,9 @@ export function AgentOffice({ data, activeSessionId }: Props) {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(defaultTeamId);
   const selectedTeam = teams.find((team) => team.sessionId === selectedTeamId) ?? teams[0] ?? null;
   const agents = selectedTeam?.agents ?? [];
-  const activeAgents = agents.filter((agent) => agent.active).length;
+  const lead = selectedTeam?.lead ?? null;
+  const roster = selectedTeam?.roster ?? [];
+  const activeAgents = roster.filter((agent) => agent.active).length;
 
   if (teams.length === 0) {
     return (
@@ -115,7 +128,7 @@ export function AgentOffice({ data, activeSessionId }: Props) {
     <section className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <MetricCard label="Teams" value={formatNumber(teams.length)} />
-        <MetricCard label="Agents in team" value={formatNumber(agents.length)} />
+        <MetricCard label="Agents in team" value={formatNumber(roster.length)} />
         <MetricCard label="Team tokens" value={formatNumber(selectedTeam?.totalTokens ?? 0)} />
       </div>
 
@@ -152,7 +165,7 @@ export function AgentOffice({ data, activeSessionId }: Props) {
                     </span>
                   </div>
                   <p suppressHydrationWarning className="mt-2 text-xs text-zinc-500">
-                    {team.agents.length} agents · {formatNumber(team.totalTokens)} tokens · {formatRelative(team.lastActivityAt)}
+                    {team.roster.length} agents · {formatNumber(team.totalTokens)} tokens · {formatRelative(team.lastActivityAt)}
                   </p>
                 </button>
               );
@@ -175,8 +188,29 @@ export function AgentOffice({ data, activeSessionId }: Props) {
             <div className="absolute left-6 top-6 max-w-[40%] rounded border border-amber-300/30 bg-amber-200/10 px-3 py-2 text-xs text-amber-100">
               Standup board · {data.project.name}
             </div>
+            {lead ? (
+              <div className="absolute right-6 top-6 w-48 rounded-xl border border-cyan-300/40 bg-cyan-200/10 p-3 shadow-lg backdrop-blur">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="rounded bg-cyan-300/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-100">
+                    Team lead
+                  </span>
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${lead.active ? "bg-emerald-300/20 text-emerald-100" : "bg-white/10 text-slate-300"}`}>
+                    {lead.active ? "Active" : "Idle"}
+                  </span>
+                </div>
+                <div className={`mx-auto h-10 w-10 rounded-full border-2 border-cyan-100/60 ${lead.active ? "animate-pulse bg-emerald-500" : "bg-cyan-500"}`}>
+                  <span className="flex h-full items-center justify-center text-[11px] font-bold text-white">
+                    {getInitials(lead.agentName)}
+                  </span>
+                </div>
+                <p className="mt-2 truncate text-center font-mono text-xs text-cyan-50">@{lead.agentName}</p>
+                <p className="mt-1 text-center text-[10px] text-cyan-100/70">
+                  {formatNumber(lead.totalTokens)} tokens · {lead.turns} turns
+                </p>
+              </div>
+            ) : null}
             <div className="absolute bottom-6 right-6 rounded border border-cyan-300/30 bg-cyan-200/10 px-3 py-2 text-xs text-cyan-100">
-              {agents.length} agents · {selectedTeam?.turns ?? 0} turns
+              {roster.length} agents · {selectedTeam?.turns ?? 0} turns
             </div>
 
             {agents.map((agent, index) => {
