@@ -10,21 +10,27 @@ type Props = {
   projects: ProjectCard[];
   activeSlug?: string;
   pendingSlug?: string | null;
+  collapsed?: boolean;
   onProjectSelect?: (slug: string) => void;
 };
 
 const PAGE_SIZE = 3;
 
-export function ProjectSidebar({ projects, activeSlug, pendingSlug, onProjectSelect }: Props) {
+export function ProjectSidebar({ projects, activeSlug, pendingSlug, collapsed = false, onProjectSelect }: Props) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const visibleProjects = useMemo(() => projects.slice(0, visibleCount), [projects, visibleCount]);
   const canLoadMore = visibleCount < projects.length;
 
   return (
-    <nav className="w-80 border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="border-b border-zinc-200 p-4 dark:border-zinc-800">
-        <p className="text-lg font-semibold">Projects</p>
-        <p className="text-xs text-zinc-500">Session + beads overview</p>
+    <nav
+      id="projects-sidebar"
+      className="h-full w-full border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"
+      aria-label="Projects"
+    >
+      <div className="border-b border-zinc-200 p-3 dark:border-zinc-800 md:p-4">
+        <p className={`text-lg font-semibold ${collapsed ? "sr-only md:not-sr-only" : ""}`}>Projects</p>
+        <p className={`text-xs text-zinc-500 ${collapsed ? "sr-only md:not-sr-only" : ""}`}>Session + beads overview</p>
+        {collapsed ? <p className="text-center text-xs font-semibold text-zinc-500 md:hidden">PRJ</p> : null}
       </div>
 
       <div className="max-h-[calc(100vh-72px)] overflow-y-auto p-2">
@@ -51,7 +57,10 @@ export function ProjectSidebar({ projects, activeSlug, pendingSlug, onProjectSel
                 event.preventDefault();
                 onProjectSelect(project.slug);
               }}
-              className={`mb-2 block rounded-lg border p-3 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 ${
+              title={collapsed ? project.name : undefined}
+              className={`mb-2 block rounded-lg border transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 ${
+                collapsed ? "p-2 text-center md:p-3 md:text-left" : "p-3"
+              } ${
                 active
                   ? "border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-500/10"
                   : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
@@ -59,7 +68,12 @@ export function ProjectSidebar({ projects, activeSlug, pendingSlug, onProjectSel
             >
               <div className="mb-1 flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2">
-                  <p className="truncate text-sm font-semibold">{project.name}</p>
+                  <p className={`truncate text-sm font-semibold ${collapsed ? "sr-only md:not-sr-only" : ""}`}>{project.name}</p>
+                  {collapsed ? (
+                    <span aria-hidden="true" className="mx-auto text-xs font-semibold md:hidden">
+                      {project.name.slice(0, 2).toUpperCase()}
+                    </span>
+                  ) : null}
                   {pending ? (
                     <span
                       aria-hidden="true"
@@ -67,18 +81,18 @@ export function ProjectSidebar({ projects, activeSlug, pendingSlug, onProjectSel
                     />
                   ) : null}
                 </div>
-                <p suppressHydrationWarning className="text-[11px] text-zinc-500">{formatRelative(project.lastActivityAt)}</p>
+                <p suppressHydrationWarning className={`text-[11px] text-zinc-500 ${collapsed ? "hidden md:block" : ""}`}>{formatRelative(project.lastActivityAt)}</p>
               </div>
 
-              <p className="truncate text-[11px] text-zinc-500">{project.absolutePath}</p>
+              <p className={`truncate text-[11px] text-zinc-500 ${collapsed ? "hidden md:block" : ""}`}>{project.absolutePath}</p>
 
-              <div className="mt-2 space-y-2 text-[11px] text-zinc-600 dark:text-zinc-300">
+              <div className={`mt-2 space-y-2 text-[11px] text-zinc-600 dark:text-zinc-300 ${collapsed ? "hidden md:block" : ""}`}>
                 <p>
                   {project.sessionCount} sessions · {formatNumber(project.totalInputTokens + project.totalOutputTokens)} tokens
                 </p>
               </div>
 
-              <div className="mt-2 flex flex-wrap gap-1 text-[10px]">
+              <div className={`mt-2 flex flex-wrap gap-1 text-[10px] ${collapsed ? "hidden md:flex" : ""}`}>
                 <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
                   O {project.beadsCounts.open}
                 </span>
@@ -100,7 +114,9 @@ export function ProjectSidebar({ projects, activeSlug, pendingSlug, onProjectSel
           <button
             type="button"
             onClick={() => setVisibleCount((current) => current + PAGE_SIZE)}
-            className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm transition hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            className={`mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm transition hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 dark:hover:bg-zinc-900 ${
+              collapsed ? "hidden md:block" : ""
+            }`}
           >
             Загрузить ещё
           </button>
