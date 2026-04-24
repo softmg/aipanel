@@ -22,5 +22,11 @@
         "matcher": ""
       }
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "printf 'team · Shift+↓ /agents'",
+    "padding": 1,
+    "refreshInterval": 60
   }
 }
