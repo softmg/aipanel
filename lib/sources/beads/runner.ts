@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -5,12 +6,17 @@ import type { BeadTask, BeadTaskDetail } from "@/lib/sources/beads/types";
 
 const execFileAsync = promisify(execFile);
 
-const BEADS_LIST_TTL_MS = 3_000;
+const BEADS_LIST_TTL_MS = 30_000;
 type CachedBeads = { promise: Promise<BeadTask[]>; createdAt: number };
 const beadsListCache = new Map<string, CachedBeads>();
 
 export async function runBeadsList(projectPath: string): Promise<BeadTask[]> {
   const resolvedPath = path.resolve(projectPath);
+  const beadsDir = path.resolve(resolvedPath, ".beads");
+  if (!fs.existsSync(beadsDir)) {
+    return [];
+  }
+
   const cached = beadsListCache.get(resolvedPath);
   const now = Date.now();
 
@@ -18,6 +24,7 @@ export async function runBeadsList(projectPath: string): Promise<BeadTask[]> {
     return cached.promise;
   }
 
+  const previousDataPromise = cached?.promise ?? Promise.resolve([] as BeadTask[]);
   const promise = execFileAsync("bd", ["list", "--all", "--format", "json"], {
     cwd: resolvedPath,
     timeout: 5000,
@@ -27,7 +34,7 @@ export async function runBeadsList(projectPath: string): Promise<BeadTask[]> {
       const parsed = JSON.parse(stdout);
       return Array.isArray(parsed) ? (parsed as BeadTask[]) : [];
     })
-    .catch(() => [] as BeadTask[]);
+    .catch(() => previousDataPromise);
 
   beadsListCache.set(resolvedPath, { promise, createdAt: now });
   return promise;
