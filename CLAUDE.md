@@ -61,6 +61,16 @@ pnpm build
 pnpm dev
 ```
 
+## Claude Skill Stack
+
+- Use beads (`bd`) as the only project task tracker; do not use markdown TODO lists or Claude task lists for project work.
+- Use `claude-mem` skills for prior-session context and timeline/history questions.
+- Use Serena or structural exploration skills before reading large files.
+- Use `agent-teams-sm` for substantial multi-file feature work and `.conventions/` maintenance.
+- Use Playwright/browser verification for UI changes before reporting completion.
+- Use `review`, `security-review`, and `simplify` for final quality checks when appropriate.
+- Do not use `bishx` workflows in this project; they overlap with beads, `agent-teams-sm`, `claude-mem`, and built-in review flows.
+
 ## Architecture Overview
 
 - Next.js App Router UI with server-rendered pages and client-only interactive controls.
