@@ -8,6 +8,7 @@ import {
 
 const SETTINGS_FILE_NAME = "notification-settings.json";
 const DEFAULT_CONFIG_DIR_NAME = ".aipanel";
+const CONFIG_DIR_ENV = "AIPANEL_CONFIG_DIR";
 
 export type NotificationSettingsOptions = {
   configDir?: string;
@@ -48,7 +49,7 @@ export function getDefaultNotificationSettings(): NotificationSettings {
 }
 
 export function getNotificationSettingsPath(options: NotificationSettingsOptions = {}): string {
-  const configDir = options.configDir ?? path.join(os.homedir(), DEFAULT_CONFIG_DIR_NAME);
+  const configDir = options.configDir ?? process.env[CONFIG_DIR_ENV] ?? path.join(os.homedir(), DEFAULT_CONFIG_DIR_NAME);
   return path.join(configDir, SETTINGS_FILE_NAME);
 }
 
