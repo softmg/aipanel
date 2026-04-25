@@ -63,6 +63,7 @@ export const notificationRuleSchema = z.discriminatedUnion("scope", [
       ...ruleShape,
       scope: z.literal("session"),
       sessionId: z.string().min(1),
+      projectSlug: z.string().min(1).optional(),
     })
     .strict(),
 ]);
