@@ -43,3 +43,15 @@ next-env.d.ts
 # local config
 projects.json
 .idea
+
+# local agent/tool state
+.beads/embeddeddolt/
+.briefs/
+.claude/scheduled_tasks.lock
+.claude/teams/
+.claude/worktrees/
+.playwright-mcp/
+.serena/
+
+# local verification screenshots
+mobile-header-*.png
