@@ -150,6 +150,82 @@ describe("claude-code parser", () => {
     }
   });
 
+
+  it("computes context usage from the latest assistant usage object", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
+    const filePath = path.join(tempRoot, "session-context.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: "assistant",
+          timestamp: "2026-04-21T10:00:00.000Z",
+          message: {
+            usage: {
+              input_tokens: 500000,
+              output_tokens: 1,
+              cache_read_input_tokens: 1000,
+              cache_creation_input_tokens: 1000,
+            },
+          },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          timestamp: "2026-04-21T10:01:00.000Z",
+          message: {
+            usage: {
+              input_tokens: 100,
+              output_tokens: 1,
+              cache_read_input_tokens: 20,
+              cache_creation_input_tokens: 30,
+            },
+          },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const summary = await parseSessionFile(filePath);
+      expect(summary.usage.inputTokens).toBe(500100);
+      expect(summary.contextUsage).toEqual({
+        contextTokens: 150,
+        contextWindowTokens: null,
+        contextUsagePercent: null,
+        source: "estimated-from-latest-usage",
+        updatedAt: "2026-04-21T10:01:00.000Z",
+      });
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("marks context usage unavailable when assistant usage is missing", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
+    const filePath = path.join(tempRoot, "session-no-context.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      JSON.stringify({
+        type: "assistant",
+        timestamp: "2026-04-21T10:00:00.000Z",
+        message: { content: "No usage payload" },
+      }),
+      "utf8",
+    );
+
+    try {
+      const summary = await parseSessionFile(filePath);
+      expect(summary.contextUsage).toEqual({
+        contextTokens: null,
+        source: "unavailable",
+      });
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("extracts known subagent name and usage from subagent logs", async () => {
     const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-parser-"));
     const sessionPath = path.join(tempRoot, "session-3.jsonl");

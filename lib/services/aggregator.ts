@@ -13,8 +13,9 @@ import {
   listNotificationsForProject,
   listSessionsForProject as listClaudeSessions,
 } from "@/lib/sources/claude-code";
-import { mergeNotificationsWithMainSessionThresholds } from "@/lib/sources/claude-code/notifications";
+import { mergeNotificationsWithContextThresholds } from "@/lib/sources/claude-code/notifications";
 import type { ProjectCard, ProjectDetail } from "@/lib/services/types";
+import { loadNotificationSettings } from "@/lib/notifications/settings";
 
 type CachedSessions = {
   createdAt: number;
@@ -167,20 +168,22 @@ export async function getProjectDetail(slug: string): Promise<ProjectDetail | nu
     return null;
   }
 
-  const [{ sessions, sessionWarnings }, beads, notifications] = await Promise.all([
+  const [{ sessions, sessionWarnings }, beads, notifications, settings] = await Promise.all([
     getSessionsForProject(project),
     listTasksForProject(project.absolutePath).catch(() => null),
     listNotificationsForProject(project.absolutePath).catch(() => []),
+    loadNotificationSettings(),
   ]);
 
   const notificationsWithProject = withProjectMetadata(
-    mergeNotificationsWithMainSessionThresholds(
+    mergeNotificationsWithContextThresholds(
       notifications,
       sessions.map((session) => ({
         sessionId: session.sessionId,
         title: session.title,
         startedAt: session.startedAt,
-        mainInputTokens: session.usageSplit.main.inputTokens,
+        contextUsage: session.contextUsage,
+        contextTokensThreshold: settings.defaults.contextTokensThreshold,
       })),
     ),
     project,
@@ -239,19 +242,21 @@ export async function getProjectNotifications(slug: string) {
     return [];
   }
 
-  const [{ sessions }, notifications] = await Promise.all([
+  const [{ sessions }, notifications, settings] = await Promise.all([
     getSessionsForProject(project),
     listNotificationsForProject(project.absolutePath).catch(() => []),
+    loadNotificationSettings(),
   ]);
 
   return withProjectMetadata(
-    mergeNotificationsWithMainSessionThresholds(
+    mergeNotificationsWithContextThresholds(
       notifications,
       sessions.map((session) => ({
         sessionId: session.sessionId,
         title: session.title,
         startedAt: session.startedAt,
-        mainInputTokens: session.usageSplit.main.inputTokens,
+        contextUsage: session.contextUsage,
+        contextTokensThreshold: settings.defaults.contextTokensThreshold,
       })),
     ),
     project,

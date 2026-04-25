@@ -46,8 +46,8 @@ describe("notification settings", () => {
     });
   });
 
-  it("sets the default main session input token threshold", () => {
-    expect(getDefaultNotificationSettings().defaults.mainSessionInputTokens).toBe(500000);
+  it("sets the default context token threshold", () => {
+    expect(getDefaultNotificationSettings().defaults.contextTokensThreshold).toBe(500000);
   });
 
   it("returns fresh default settings objects", () => {
@@ -72,6 +72,8 @@ describe("notification settings", () => {
 
       const raw = await fs.readFile(getNotificationSettingsPath({ configDir }), "utf8");
       expect(raw).toContain('\n  "enabled": true');
+      expect(raw).toContain('"contextTokensThreshold"');
+      expect(raw).not.toContain('mainSessionInputTokens');
       expect(notificationSettingsSchema.safeParse(JSON.parse(raw)).success).toBe(true);
     });
   });
@@ -81,12 +83,48 @@ describe("notification settings", () => {
       const settings = getDefaultNotificationSettings();
       settings.enabled = false;
       settings.channels.browser = false;
-      settings.defaults.mainSessionInputTokens = 750000;
+      settings.defaults.contextTokensThreshold = 750000;
       settings.rules[0]!.kinds = ["question"];
 
       await saveNotificationSettings(settings, { configDir });
 
       await expect(loadNotificationSettings({ configDir })).resolves.toEqual(settings);
+    });
+  });
+
+
+  it("migrates legacy main session input token settings to context token settings", async () => {
+    await withTempConfigDir(async (configDir) => {
+      await writeSettingsFile(
+        configDir,
+        JSON.stringify({
+          ...getDefaultNotificationSettings(),
+          defaults: {
+            mainSessionInputTokens: 750000,
+            suppressBrowserWhenVisible: true,
+            rateLimit: { max: 3, windowSeconds: 10 },
+          },
+          rules: [
+            {
+              id: "legacy-rule",
+              scope: "global",
+              enabled: true,
+              kinds: ["alert"],
+              thresholds: { mainSessionInputTokens: 800000 },
+              channels: { inApp: true, browser: true, telegram: false, macos: false },
+            },
+          ],
+        }),
+      );
+
+      await expect(loadNotificationSettings({ configDir })).resolves.toMatchObject({
+        defaults: { contextTokensThreshold: 750000 },
+        rules: [
+          {
+            thresholds: { contextTokens: 800000 },
+          },
+        ],
+      });
     });
   });
 

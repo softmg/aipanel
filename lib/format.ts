@@ -23,3 +23,15 @@ export function formatRelative(value: string | null): string {
 
   return `${Math.floor(delta / day)}d ago`;
 }
+
+export function formatContextTokens(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "—";
+  }
+
+  if (value >= 1000) {
+    return `${Math.round(value / 1000).toLocaleString()}k`;
+  }
+
+  return value.toLocaleString();
+}

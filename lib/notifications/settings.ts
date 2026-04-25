@@ -24,7 +24,7 @@ export function getDefaultNotificationSettings(): NotificationSettings {
       macos: false,
     },
     defaults: {
-      mainSessionInputTokens: 500000,
+      contextTokensThreshold: 500000,
       suppressBrowserWhenVisible: true,
       rateLimit: {
         max: 3,
@@ -48,6 +48,45 @@ export function getDefaultNotificationSettings(): NotificationSettings {
   };
 }
 
+
+type LegacyNotificationSettings = {
+  defaults?: {
+    mainSessionInputTokens?: unknown;
+    contextTokensThreshold?: unknown;
+  };
+  rules?: Array<{
+    thresholds?: {
+      mainSessionInputTokens?: unknown;
+      contextTokens?: unknown;
+    };
+  }>;
+};
+
+function migrateLegacyNotificationSettings(parsed: unknown): unknown {
+  if (!parsed || typeof parsed !== "object") {
+    return parsed;
+  }
+
+  const migrated = structuredClone(parsed) as LegacyNotificationSettings;
+  if (migrated.defaults?.contextTokensThreshold === undefined && migrated.defaults?.mainSessionInputTokens !== undefined) {
+    migrated.defaults.contextTokensThreshold = migrated.defaults.mainSessionInputTokens;
+  }
+  if (migrated.defaults) {
+    delete migrated.defaults.mainSessionInputTokens;
+  }
+
+  for (const rule of migrated.rules ?? []) {
+    if (rule.thresholds?.contextTokens === undefined && rule.thresholds?.mainSessionInputTokens !== undefined) {
+      rule.thresholds.contextTokens = rule.thresholds.mainSessionInputTokens;
+    }
+    if (rule.thresholds) {
+      delete rule.thresholds.mainSessionInputTokens;
+    }
+  }
+
+  return migrated;
+}
+
 export function getNotificationSettingsPath(options: NotificationSettingsOptions = {}): string {
   const configDir = options.configDir ?? process.env[CONFIG_DIR_ENV] ?? path.join(os.homedir(), DEFAULT_CONFIG_DIR_NAME);
   return path.join(configDir, SETTINGS_FILE_NAME);
@@ -65,7 +104,7 @@ export async function loadNotificationSettings(
   }
 
   try {
-    return notificationSettingsSchema.parse(JSON.parse(raw));
+    return notificationSettingsSchema.parse(migrateLegacyNotificationSettings(JSON.parse(raw)));
   } catch {
     return getDefaultNotificationSettings();
   }

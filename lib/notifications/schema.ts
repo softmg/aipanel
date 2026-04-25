@@ -15,7 +15,7 @@ const channelsSchema = z
 
 const thresholdsSchema = z
   .object({
-    mainSessionInputTokens: z.number().finite().positive().optional(),
+    contextTokens: z.number().finite().positive().optional(),
   })
   .strict();
 
@@ -74,7 +74,7 @@ export const notificationSettingsSchema = z
     channels: channelsSchema,
     defaults: z
       .object({
-        mainSessionInputTokens: z.number().finite().positive(),
+        contextTokensThreshold: z.number().finite().positive(),
         suppressBrowserWhenVisible: z.boolean(),
         rateLimit: rateLimitSchema,
       })

@@ -50,6 +50,10 @@ function createSession(overrides: Partial<ClaudeSessionSummary> = {}): ClaudeSes
       agents: { inputTokens: 0, outputTokens: 0 },
       total: { inputTokens: 1, outputTokens: 1 },
     },
+    contextUsage: {
+      contextTokens: 1,
+      source: "estimated-from-latest-usage",
+    },
     userPromptCount: 1,
     assistantTurnCount: 1,
     subagentCount: 0,

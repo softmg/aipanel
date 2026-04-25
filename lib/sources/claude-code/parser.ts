@@ -6,6 +6,7 @@ import readline from "node:readline";
 import type {
   ClaudeSessionSummary,
   ClaudeSubagentSummary,
+  SessionContextUsage,
   TokenUsage,
   TokenUsageSplit,
 } from "@/lib/sources/claude-code/types";
@@ -15,6 +16,9 @@ type RawUsage = {
   output_tokens?: number;
   cache_read_input_tokens?: number;
   cache_creation_input_tokens?: number;
+  context_tokens?: number;
+  context_window_tokens?: number;
+  context_usage_percent?: number;
 };
 
 type RawContentItem = {
@@ -400,6 +404,62 @@ function parseUsage(event: RawEvent): RawUsage {
   return event.message?.usage ?? {};
 }
 
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function resolveContextUsagePercent(contextTokens: number, contextWindowTokens: number | null, explicitPercent: number | null): number | null {
+  if (explicitPercent !== null) {
+    return explicitPercent;
+  }
+  if (contextWindowTokens === null) {
+    return null;
+  }
+
+  return (contextTokens / contextWindowTokens) * 100;
+}
+
+function buildContextUsageFromUsage(usage: RawUsage, updatedAt: string | null): SessionContextUsage | null {
+  const explicitContextTokens = finiteNumber(usage.context_tokens);
+  const contextWindowTokens = finiteNumber(usage.context_window_tokens);
+  const explicitContextUsagePercent = finiteNumber(usage.context_usage_percent);
+
+  if (explicitContextTokens !== null) {
+    return {
+      contextTokens: explicitContextTokens,
+      contextWindowTokens,
+      contextUsagePercent: resolveContextUsagePercent(explicitContextTokens, contextWindowTokens, explicitContextUsagePercent),
+      source: "explicit",
+      ...(updatedAt ? { updatedAt } : {}),
+    };
+  }
+
+  const inputTokens = finiteNumber(usage.input_tokens);
+  const cacheCreationTokens = finiteNumber(usage.cache_creation_input_tokens) ?? 0;
+  const cacheReadTokens = finiteNumber(usage.cache_read_input_tokens) ?? 0;
+
+  if (inputTokens === null) {
+    return null;
+  }
+
+  const contextTokens = inputTokens + cacheCreationTokens + cacheReadTokens;
+
+  return {
+    contextTokens,
+    contextWindowTokens,
+    contextUsagePercent: resolveContextUsagePercent(contextTokens, contextWindowTokens, explicitContextUsagePercent),
+    source: "estimated-from-latest-usage",
+    ...(updatedAt ? { updatedAt } : {}),
+  };
+}
+
+function unavailableContextUsage(): SessionContextUsage {
+  return {
+    contextTokens: null,
+    source: "unavailable",
+  };
+}
+
 function getTokenUsageSplit(mainUsage: TokenUsage, subagents: ClaudeSubagentSummary[]): TokenUsageSplit {
   const agents = subagents.reduce(
     (sum, agent) => {
@@ -498,6 +558,7 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
   let outputTokens = 0;
   let cacheReadTokens = 0;
   let cacheCreationTokens = 0;
+  let contextUsage: SessionContextUsage | null = null;
   let teamName: string | undefined;
 
   const stream = createReadStream(filePath, { encoding: "utf8" });
@@ -549,6 +610,10 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
       outputTokens += usage.output_tokens ?? 0;
       cacheReadTokens += usage.cache_read_input_tokens ?? 0;
       cacheCreationTokens += usage.cache_creation_input_tokens ?? 0;
+      const latestContextUsage = buildContextUsageFromUsage(usage, eventTime);
+      if (latestContextUsage) {
+        contextUsage = latestContextUsage;
+      }
     }
   }
 
@@ -578,6 +643,7 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeSessionS
     lastActivityAt: lastActivityAt ?? stat.mtime.toISOString(),
     usage,
     usageSplit: getTokenUsageSplit(usage, subagents),
+    contextUsage: contextUsage ?? unavailableContextUsage(),
     userPromptCount,
     assistantTurnCount,
     subagentCount,

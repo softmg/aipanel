@@ -16,6 +16,14 @@ export type TokenUsageSplit = {
   total: InOutTokenUsage;
 };
 
+export type SessionContextUsage = {
+  contextTokens: number | null;
+  contextWindowTokens?: number | null;
+  contextUsagePercent?: number | null;
+  source: "explicit" | "estimated-from-latest-usage" | "unavailable";
+  updatedAt?: string;
+};
+
 export type ClaudeSubagentSummary = {
   agentId: string;
   agentName: string;
@@ -31,6 +39,7 @@ export type ClaudeSessionSummary = {
   lastActivityAt: string | null;
   usage: TokenUsage;
   usageSplit: TokenUsageSplit;
+  contextUsage: SessionContextUsage;
   userPromptCount: number;
   assistantTurnCount: number;
   subagentCount: number;

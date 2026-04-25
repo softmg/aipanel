@@ -3,10 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  MAIN_SESSION_INPUT_THRESHOLD,
-  buildMainSessionThresholdNotification,
+  CONTEXT_TOKENS_THRESHOLD,
+  buildContextThresholdNotification,
   clearClaudeCodeNotificationCache,
-  mergeNotificationsWithMainSessionThresholds,
+  mergeNotificationsWithContextThresholds,
   parseSessionNotifications,
 } from "@/lib/sources/claude-code/notifications";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
@@ -98,40 +98,62 @@ describe("claude-code notifications", () => {
     }
   });
 
-  it("builds a main-session threshold alert when input reaches threshold", () => {
-    const notification = buildMainSessionThresholdNotification({
+  it("builds a context threshold alert when context reaches threshold", () => {
+    const notification = buildContextThresholdNotification({
       sessionId: "session-main",
       title: "Primary coding session",
       startedAt: "2026-04-21T10:00:00.000Z",
-      mainInputTokens: MAIN_SESSION_INPUT_THRESHOLD,
+      contextUsage: {
+        contextTokens: CONTEXT_TOKENS_THRESHOLD,
+        source: "estimated-from-latest-usage",
+        updatedAt: "2026-04-21T10:05:00.000Z",
+      },
     });
 
     expect(notification).not.toBeNull();
     expect(notification).toMatchObject({
-      id: `session-main-main-input-${MAIN_SESSION_INPUT_THRESHOLD}`,
+      id: `session-main-context-tokens-${CONTEXT_TOKENS_THRESHOLD}`,
       sessionId: "session-main",
       sessionLabel: "Primary coding session",
+      createdAt: "2026-04-21T10:05:00.000Z",
       kind: "alert",
       status: "warning",
       source: "derived",
-      title: `Main session input reached ${MAIN_SESSION_INPUT_THRESHOLD.toLocaleString()} tokens`,
-      details: `Main input tokens: ${MAIN_SESSION_INPUT_THRESHOLD.toLocaleString()}`,
+      title: `Context threshold reached: ${CONTEXT_TOKENS_THRESHOLD.toLocaleString()} tokens`,
+      details: `Context tokens: ${CONTEXT_TOKENS_THRESHOLD.toLocaleString()}. Threshold: ${CONTEXT_TOKENS_THRESHOLD.toLocaleString()}.`,
     });
   });
 
-  it("does not build a threshold alert when main input is below threshold", () => {
-    const notification = buildMainSessionThresholdNotification({
+  it("does not build a threshold alert when context is below threshold", () => {
+    const notification = buildContextThresholdNotification({
       sessionId: "session-main",
       title: "Primary coding session",
       startedAt: "2026-04-21T10:00:00.000Z",
-      mainInputTokens: MAIN_SESSION_INPUT_THRESHOLD - 1,
+      contextUsage: {
+        contextTokens: CONTEXT_TOKENS_THRESHOLD - 1,
+        source: "estimated-from-latest-usage",
+      },
     });
 
     expect(notification).toBeNull();
   });
 
-  it("merges threshold alerts with log notifications, dedupes ids, and sorts by time", () => {
-    const thresholdId = `session-main-main-input-${MAIN_SESSION_INPUT_THRESHOLD}`;
+  it("does not build a threshold alert when context is unavailable", () => {
+    const notification = buildContextThresholdNotification({
+      sessionId: "session-main",
+      title: "Primary coding session",
+      startedAt: "2026-04-21T10:00:00.000Z",
+      contextUsage: {
+        contextTokens: null,
+        source: "unavailable",
+      },
+    });
+
+    expect(notification).toBeNull();
+  });
+
+  it("merges context alerts with log notifications, dedupes ids, and sorts by time", () => {
+    const thresholdId = `session-main-context-tokens-${CONTEXT_TOKENS_THRESHOLD}`;
     const notifications: ClaudeNotification[] = [
       {
         id: thresholdId,
@@ -154,18 +176,24 @@ describe("claude-code notifications", () => {
       },
     ];
 
-    const merged = mergeNotificationsWithMainSessionThresholds(notifications, [
+    const merged = mergeNotificationsWithContextThresholds(notifications, [
       {
         sessionId: "session-main",
         title: "Primary coding session",
         startedAt: "2026-04-21T10:02:00.000Z",
-        mainInputTokens: MAIN_SESSION_INPUT_THRESHOLD,
+        contextUsage: {
+          contextTokens: CONTEXT_TOKENS_THRESHOLD,
+          source: "estimated-from-latest-usage",
+        },
       },
       {
-        sessionId: "session-agents",
-        title: "Agents-heavy session",
+        sessionId: "session-high-total-low-context",
+        title: "High total tokens, low context",
         startedAt: "2026-04-21T10:01:00.000Z",
-        mainInputTokens: MAIN_SESSION_INPUT_THRESHOLD - 1,
+        contextUsage: {
+          contextTokens: CONTEXT_TOKENS_THRESHOLD - 1,
+          source: "estimated-from-latest-usage",
+        },
       },
     ]);
 
@@ -175,7 +203,7 @@ describe("claude-code notifications", () => {
       kind: "alert",
       source: "derived",
       sessionLabel: "Primary coding session",
-      details: `Main input tokens: ${MAIN_SESSION_INPUT_THRESHOLD.toLocaleString()}`,
+      details: `Context tokens: ${CONTEXT_TOKENS_THRESHOLD.toLocaleString()}. Threshold: ${CONTEXT_TOKENS_THRESHOLD.toLocaleString()}.`,
     });
   });
 
@@ -199,14 +227,14 @@ describe("claude-code notifications", () => {
       },
     ];
 
-    const merged = mergeNotificationsWithMainSessionThresholds(
+    const merged = mergeNotificationsWithContextThresholds(
       notifications,
       [
         {
           sessionId: "s-3",
           title: "Threshold",
           startedAt: "2026-04-21T10:00:00.000Z",
-          mainInputTokens: MAIN_SESSION_INPUT_THRESHOLD,
+          contextUsage: { contextTokens: CONTEXT_TOKENS_THRESHOLD, source: "estimated-from-latest-usage" },
         },
       ],
       { limit: 1 },

@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import { getClaudeProjectDir } from "@/lib/sources/claude-code/paths";
-import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
+import type { ClaudeNotification, SessionContextUsage } from "@/lib/sources/claude-code/types";
 
 type RawEvent = {
   type?: string;
@@ -29,13 +29,14 @@ type CachedNotifications = {
   value: ClaudeNotification[];
 };
 
-export const MAIN_SESSION_INPUT_THRESHOLD = 500_000;
+export const CONTEXT_TOKENS_THRESHOLD = 500_000;
 
-export type MainSessionThresholdSession = {
+export type ContextThresholdSession = {
   sessionId: string;
   title?: string;
   startedAt: string | null;
-  mainInputTokens: number;
+  contextUsage: SessionContextUsage;
+  contextTokensThreshold?: number;
   projectSlug?: string;
   projectLabel?: string;
 };
@@ -160,31 +161,44 @@ function extractNotificationsFromEvent(event: RawEvent, sessionId: string, event
   return notifications;
 }
 
-export function buildMainSessionThresholdNotification(
-  session: MainSessionThresholdSession,
-): ClaudeNotification | null {
-  if (session.mainInputTokens < MAIN_SESSION_INPUT_THRESHOLD) {
+function formatContextDetails(contextUsage: SessionContextUsage, threshold: number): string {
+  const contextTokens = Math.floor(contextUsage.contextTokens ?? 0).toLocaleString();
+  const thresholdTokens = Math.floor(threshold).toLocaleString();
+
+  if (contextUsage.contextWindowTokens && contextUsage.contextUsagePercent !== null && contextUsage.contextUsagePercent !== undefined) {
+    return `Context tokens: ${contextTokens} of ${Math.floor(contextUsage.contextWindowTokens).toLocaleString()} (${Math.round(
+      contextUsage.contextUsagePercent,
+    )}%). Threshold: ${thresholdTokens}.`;
+  }
+
+  return `Context tokens: ${contextTokens}. Threshold: ${thresholdTokens}.`;
+}
+
+export function buildContextThresholdNotification(session: ContextThresholdSession): ClaudeNotification | null {
+  const threshold = session.contextTokensThreshold ?? CONTEXT_TOKENS_THRESHOLD;
+  const contextTokens = session.contextUsage.contextTokens;
+  if (contextTokens === null || contextTokens < threshold) {
     return null;
   }
 
   return {
-    id: `${session.sessionId}-main-input-${MAIN_SESSION_INPUT_THRESHOLD}`,
+    id: `${session.sessionId}-context-tokens-${threshold}`,
     sessionId: session.sessionId,
     sessionLabel: buildFallbackSessionLabel(session.sessionId, session.title),
     projectSlug: session.projectSlug,
     projectLabel: session.projectLabel,
-    createdAt: session.startedAt ?? new Date(0).toISOString(),
+    createdAt: session.contextUsage.updatedAt ?? session.startedAt ?? new Date(0).toISOString(),
     kind: "alert",
-    title: `Main session input reached ${MAIN_SESSION_INPUT_THRESHOLD.toLocaleString()} tokens`,
-    details: `Main input tokens: ${Math.floor(session.mainInputTokens).toLocaleString()}`,
+    title: `Context threshold reached: ${Math.floor(contextTokens).toLocaleString()} tokens`,
+    details: formatContextDetails(session.contextUsage, threshold),
     status: "warning",
     source: "derived",
   };
 }
 
-export function mergeNotificationsWithMainSessionThresholds(
+export function mergeNotificationsWithContextThresholds(
   notifications: ClaudeNotification[],
-  sessions: MainSessionThresholdSession[],
+  sessions: ContextThresholdSession[],
   options: { limit?: number } = {},
 ): ClaudeNotification[] {
   const byId = new Map<string, ClaudeNotification>();
@@ -197,7 +211,7 @@ export function mergeNotificationsWithMainSessionThresholds(
   }
 
   for (const session of sessions) {
-    const thresholdNotification = buildMainSessionThresholdNotification(session);
+    const thresholdNotification = buildContextThresholdNotification(session);
     if (!thresholdNotification) {
       continue;
     }

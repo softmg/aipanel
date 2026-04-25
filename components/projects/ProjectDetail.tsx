@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatNumber, formatRelative } from "@/lib/format";
+import { formatContextTokens, formatNumber, formatRelative } from "@/lib/format";
 import { AgentOffice } from "@/components/projects/AgentOffice";
 import { TaskDetailDrawer } from "@/components/projects/TaskDetailDrawer";
 import type { ClaudeMemObservation } from "@/lib/sources/claude-mem/types";
@@ -48,6 +48,21 @@ const tabButtonBaseClass =
 const INITIAL_VISIBLE_SESSIONS = 10;
 const LIVE_OBSERVATIONS_URL = "http://localhost:37777";
 const emptyObservationState: ObservationState = { status: "idle", items: [] };
+
+function formatContextUsage(session: ClaudeSessionSummary): string {
+  const { contextUsage } = session;
+  if (contextUsage.contextTokens === null) {
+    return "—";
+  }
+
+  if (contextUsage.contextWindowTokens && contextUsage.contextUsagePercent !== null && contextUsage.contextUsagePercent !== undefined) {
+    return `${formatContextTokens(contextUsage.contextTokens)} / ${formatContextTokens(contextUsage.contextWindowTokens)} tokens (${Math.round(
+      contextUsage.contextUsagePercent,
+    )}%)`;
+  }
+
+  return `${formatContextTokens(contextUsage.contextTokens)} tokens`;
+}
 
 function getObservationTypeMeta(type: string): { icon: string; label: string } {
   if (type === "bugfix") {
@@ -470,6 +485,7 @@ export function ProjectDetail({ data }: Props) {
                     <th className="px-3 py-2">Agents In/Out</th>
                     <th className="px-3 py-2">Total In/Out</th>
                     <th className="px-3 py-2">Cache Read</th>
+                    <th className="px-3 py-2">Context</th>
                     <th className="px-3 py-2">Prompts</th>
                   </tr>
                 </thead>
@@ -553,6 +569,7 @@ export function ProjectDetail({ data }: Props) {
                             {formatNumber(session.usageSplit.total.inputTokens)} / {formatNumber(session.usageSplit.total.outputTokens)}
                           </td>
                           <td className="px-3 py-2 text-xs">{formatNumber(session.usage.cacheReadTokens)}</td>
+                          <td className="px-3 py-2 text-xs">{formatContextUsage(session)}</td>
                           <td className="px-3 py-2 text-xs">{session.userPromptCount}</td>
                         </tr>
                         {isExpanded ? (
@@ -560,7 +577,7 @@ export function ProjectDetail({ data }: Props) {
                             id={`session-observations-${session.sessionId}`}
                             className="border-t border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/40"
                           >
-                            <td colSpan={7} className="px-4 py-4">
+                            <td colSpan={8} className="px-4 py-4">
                               <div className="space-y-4">
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <p className="text-sm font-medium">Claude-mem observations</p>

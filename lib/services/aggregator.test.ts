@@ -55,6 +55,10 @@ function createSession(overrides: Partial<ClaudeSessionSummary> = {}): ClaudeSes
       agents: { inputTokens: 0, outputTokens: 0 },
       total: { inputTokens: 1, outputTokens: 1 },
     },
+    contextUsage: {
+      contextTokens: 1,
+      source: "estimated-from-latest-usage",
+    },
     userPromptCount: 1,
     assistantTurnCount: 1,
     subagentCount: 0,
@@ -227,15 +231,19 @@ describe("aggregator", () => {
     );
   });
 
-  it("adds project metadata to derived threshold notifications", async () => {
+  it("adds project metadata to derived context threshold notifications", async () => {
     vi.spyOn(claudeCodeSource, "listSessionsForProject").mockResolvedValue([
       createSession({
         sessionId: "s-threshold",
         startedAt: "2026-04-21T09:00:00.000Z",
         usageSplit: {
-          main: { inputTokens: 500_000, outputTokens: 10 },
+          main: { inputTokens: 10, outputTokens: 10 },
           agents: { inputTokens: 123_456, outputTokens: 20 },
-          total: { inputTokens: 623_456, outputTokens: 30 },
+          total: { inputTokens: 123_466, outputTokens: 30 },
+        },
+        contextUsage: {
+          contextTokens: 500_000,
+          source: "estimated-from-latest-usage",
         },
       }),
     ]);
@@ -259,15 +267,19 @@ describe("aggregator", () => {
     );
   });
 
-  it("builds threshold alerts from main input tokens only", async () => {
+  it("does not build threshold alerts from cumulative totals when latest context is low", async () => {
     vi.spyOn(claudeCodeSource, "listSessionsForProject").mockResolvedValue([
       createSession({
         sessionId: "s-agents-heavy",
         startedAt: "2026-04-21T09:00:00.000Z",
         usageSplit: {
-          main: { inputTokens: 499_999, outputTokens: 10 },
+          main: { inputTokens: 900_000, outputTokens: 10 },
           agents: { inputTokens: 900_000, outputTokens: 20 },
-          total: { inputTokens: 1_399_999, outputTokens: 30 },
+          total: { inputTokens: 1_800_000, outputTokens: 30 },
+        },
+        contextUsage: {
+          contextTokens: 499_999,
+          source: "estimated-from-latest-usage",
         },
       }),
     ]);
@@ -284,15 +296,19 @@ describe("aggregator", () => {
     );
   });
 
-  it("preserves project metadata for derived threshold notifications in project detail", async () => {
+  it("preserves project metadata for derived context threshold notifications in project detail", async () => {
     vi.spyOn(claudeCodeSource, "listSessionsForProject").mockResolvedValue([
       createSession({
         sessionId: "s-detail-threshold",
         startedAt: "2026-04-21T09:00:00.000Z",
         usageSplit: {
-          main: { inputTokens: 500_000, outputTokens: 10 },
+          main: { inputTokens: 10, outputTokens: 10 },
           agents: { inputTokens: 123_456, outputTokens: 20 },
-          total: { inputTokens: 623_456, outputTokens: 30 },
+          total: { inputTokens: 123_466, outputTokens: 30 },
+        },
+        contextUsage: {
+          contextTokens: 500_000,
+          source: "estimated-from-latest-usage",
         },
       }),
     ]);
@@ -304,6 +320,7 @@ describe("aggregator", () => {
       }),
       async () => {
         const detail = await getProjectDetail("demo");
+        expect(detail?.sessions[0]?.contextUsage).toMatchObject({ contextTokens: 500_000 });
         expect(detail?.notifications).toHaveLength(1);
         expect(detail?.notifications[0]).toMatchObject({
           sessionId: "s-detail-threshold",
@@ -315,9 +332,6 @@ describe("aggregator", () => {
       },
     );
   });
-
-
-
 
 
   it("returns null observations when session does not belong to project", async () => {

@@ -94,7 +94,7 @@ describe("PUT /api/notification-settings", () => {
       const settings = getDefaultNotificationSettings();
       settings.enabled = false;
       settings.channels.browser = false;
-      settings.defaults.mainSessionInputTokens = 750000;
+      settings.defaults.contextTokensThreshold = 750000;
       settings.rules[0]!.kinds = ["question"];
 
       const response = await PUT(settingsRequest(settings));
