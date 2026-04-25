@@ -1,94 +1,51 @@
-# Agent Instructions
+# AGENTS.md
 
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
+Instructions for future Codex sessions in this repository.
 
-## Quick Reference
+## Project stack
 
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
+- Next.js App Router, React, TypeScript
+- Tailwind CSS v4
+- zod for schema validation
+- Vitest for tests
+- better-sqlite3 for local SQLite reads
+- pnpm for package scripts
 
-## Claude Skill Stack
+## Validation
 
-- Use beads (`bd`) as the only project task tracker; do not use markdown TODO lists or Claude task lists for project work.
-- Use `claude-mem` skills for prior-session context and timeline/history questions.
-- Use Serena or structural exploration skills before reading large files.
-- Use `agent-teams-sm` for substantial multi-file feature work and `.conventions/` maintenance.
-- Use Playwright/browser verification for UI changes before reporting completion.
-- Use `review`, `security-review`, and `simplify` for final quality checks when appropriate.
-- Do not use `bishx` workflows in this project; they overlap with beads, `agent-teams-sm`, `claude-mem`, and built-in review flows.
-
-## Non-Interactive Shell Commands
-
-**ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
-
-Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
-
-**Use these forms instead:**
-```bash
-# Force overwrite without prompting
-cp -f source dest           # NOT: cp source dest
-mv -f source dest           # NOT: mv source dest
-rm -f file                  # NOT: rm file
-
-# For recursive operations
-rm -rf directory            # NOT: rm -r directory
-cp -rf source dest          # NOT: cp -r source dest
-```
-
-**Other commands that may prompt:**
-- `scp` - use `-o BatchMode=yes` for non-interactive
-- `ssh` - use `-o BatchMode=yes` to fail instead of prompting
-- `apt-get` - use `-y` flag
-- `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
-
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
-## Beads Issue Tracker
-
-This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
-
-### Quick Reference
+Run the relevant checks after code changes:
 
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>         # Complete work
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
 ```
 
-### Rules
+For small documentation-only edits, `pnpm typecheck` is usually enough unless surrounding code changed.
 
-- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
-- Run `bd prime` for detailed command reference and session close protocol
-- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+## Notification architecture
 
-## Session Completion
+- Current browser/system notifications are open-tab Browser Notification API notifications, not service-worker Web Push.
+- Do not call them “push notifications” in UI copy unless true Web Push is implemented.
+- Notification sources currently come from Claude Code JSONL-derived `question`, `permission`, `task`, and `alert` notifications.
+- `AppShell` owns browser notification permission and client-side delivery.
+- `/api/realtime` streams notification events for the active project.
+- Keep Telegram bot tokens server-side only.
+- Do not store secrets in `localStorage`, client React state, `NEXT_PUBLIC_*` env vars, or repository-tracked files.
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+## Coding expectations
 
-**MANDATORY WORKFLOW:**
+- Keep changes small and reviewable.
+- Preserve existing conventions and typed TypeScript patterns.
+- Prefer typed helpers over large inline component logic.
+- Prefer small, testable helpers in `lib/**`; Vitest includes `lib/**/*.test.ts` and `app/api/**/*.test.ts`.
+- Add or update tests for behavior changes.
+- Validate route params and config with zod where applicable.
+- For UI changes, verify behavior in a browser before reporting completion.
 
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd dolt push
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+## Repository workflow
 
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-<!-- END BEADS INTEGRATION -->
+- Use `bd` beads for project task tracking when the session requires tracking.
+- Do not modify `.claude/settings.json` or `project.md` unless explicitly asked.
+- Do not commit or push unless explicitly requested by the user.

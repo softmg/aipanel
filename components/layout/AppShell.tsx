@@ -6,21 +6,74 @@ import { NotificationsPanel } from "@/components/layout/NotificationsPanel";
 import { RealtimeUpdates, type RealtimeNotificationItem } from "@/components/layout/RealtimeUpdates";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { ProjectSidebar } from "@/components/projects/ProjectSidebar";
+import { shouldShowBrowserDesktopAlert } from "@/lib/notifications/browser-delivery";
+import {
+  getBrowserNotificationStatus,
+  type BrowserNotificationStatus,
+  type BrowserNotificationStatusInput,
+} from "@/lib/notifications/browser-status";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 import type { ProjectCard } from "@/lib/services/types";
 
 const RATE_LIMIT_WINDOW_MS = 10_000;
 const RATE_LIMIT_MAX_NOTIFICATIONS = 3;
+const suppressBrowserNotificationsWhenVisible = true;
 
 type Props = {
   projects: ProjectCard[];
   activeSlug?: string;
   notifications?: ClaudeNotification[];
+  notificationBaselineAt?: string;
   children: React.ReactNode;
+};
+
+type BrowserRuntimeStatus = Pick<
+  BrowserNotificationStatusInput,
+  "notificationSupported" | "permission" | "isSecureContext" | "isLocalhost" | "visibilityState"
+>;
+
+const DEFAULT_BROWSER_RUNTIME_STATUS: BrowserRuntimeStatus = {
+  notificationSupported: false,
+  permission: "unsupported",
+  isSecureContext: false,
+  isLocalhost: false,
+  visibilityState: "unknown",
 };
 
 function canUseBrowserNotifications(): boolean {
   return typeof window !== "undefined" && "Notification" in window;
+}
+
+function getBrowserRuntimeStatus(): BrowserRuntimeStatus {
+  if (typeof window === "undefined") {
+    return DEFAULT_BROWSER_RUNTIME_STATUS;
+  }
+
+  const notificationSupported = canUseBrowserNotifications();
+  const hostname = window.location.hostname;
+  return {
+    notificationSupported,
+    permission: notificationSupported ? window.Notification.permission : "unsupported",
+    isSecureContext: window.isSecureContext,
+    isLocalhost: hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1",
+    visibilityState: typeof document === "undefined" ? "unknown" : document.visibilityState,
+  };
+}
+
+function getStatusClass(status: BrowserNotificationStatus): string {
+  if (status.severity === "ready") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300";
+  }
+  if (status.severity === "needs-action") {
+    return "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300";
+  }
+  if (status.severity === "warning") {
+    return "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300";
+  }
+  if (status.severity === "blocked") {
+    return "border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300";
+  }
+  return "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300";
 }
 
 function getNotificationKey(item: { id: string; projectSlug?: string }): string {
@@ -38,16 +91,17 @@ function getNotificationBody(item: RealtimeNotificationItem): string {
   return `${project} · ${item.sessionLabel}`;
 }
 
-export function AppShell({ projects, activeSlug, notifications = [], children }: Props) {
+export function AppShell({ projects, activeSlug, notifications = [], notificationBaselineAt, children }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const realtimeEnabled = process.env.NEXT_PUBLIC_AIPANEL_REALTIME_ENABLED !== "false";
   const browserPushEnabled = process.env.NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED !== "false";
-  const [hasUpdates, setHasUpdates] = useState(false);
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [permission, setPermission] = useState<NotificationPermission>("default");
+  const [browserRuntimeStatus, setBrowserRuntimeStatus] = useState<BrowserRuntimeStatus>(
+    DEFAULT_BROWSER_RUNTIME_STATUS,
+  );
   const seenNotificationKeysRef = useRef<Set<string>>(new Set());
   const sentAtRef = useRef<number[]>([]);
 
@@ -62,30 +116,30 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
   }, [notifications]);
 
   useEffect(() => {
-    if (!browserPushEnabled || !canUseBrowserNotifications()) {
-      return;
-    }
-
-    const syncPermission = () => {
-      setPermission(window.Notification.permission);
+    const syncBrowserRuntimeStatus = () => {
+      setBrowserRuntimeStatus(getBrowserRuntimeStatus());
     };
 
-    syncPermission();
-    window.addEventListener("focus", syncPermission);
-    document.addEventListener("visibilitychange", syncPermission);
+    syncBrowserRuntimeStatus();
+    window.addEventListener("focus", syncBrowserRuntimeStatus);
+    document.addEventListener("visibilitychange", syncBrowserRuntimeStatus);
     return () => {
-      window.removeEventListener("focus", syncPermission);
-      document.removeEventListener("visibilitychange", syncPermission);
+      window.removeEventListener("focus", syncBrowserRuntimeStatus);
+      document.removeEventListener("visibilitychange", syncBrowserRuntimeStatus);
     };
-  }, [browserPushEnabled]);
+  }, []);
 
   const handleIncomingNotifications = (items: RealtimeNotificationItem[]) => {
-    if (!browserPushEnabled || !canUseBrowserNotifications()) {
+    const runtimeStatus = getBrowserRuntimeStatus();
+    if (!browserPushEnabled || !runtimeStatus.notificationSupported) {
       return;
     }
-    if (permission !== "granted") {
+    if (runtimeStatus.permission !== "granted") {
+      setBrowserRuntimeStatus(runtimeStatus);
       return;
     }
+    setBrowserRuntimeStatus(runtimeStatus);
+
     for (const item of items) {
       const key = getNotificationKey(item);
       if (seenNotificationKeysRef.current.has(key)) {
@@ -95,7 +149,18 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
 
       const now = Date.now();
       sentAtRef.current = sentAtRef.current.filter((timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS);
-      if (sentAtRef.current.length >= RATE_LIMIT_MAX_NOTIFICATIONS) {
+      const rateLimited = sentAtRef.current.length >= RATE_LIMIT_MAX_NOTIFICATIONS;
+      if (
+        !shouldShowBrowserDesktopAlert({
+          realtimeEnabled,
+          browserNotificationsEnabled: browserPushEnabled,
+          notificationSupported: runtimeStatus.notificationSupported,
+          permission: runtimeStatus.permission,
+          visibilityState: runtimeStatus.visibilityState,
+          suppressWhenVisible: suppressBrowserNotificationsWhenVisible,
+          rateLimited,
+        })
+      ) {
         continue;
       }
       sentAtRef.current.push(now);
@@ -109,26 +174,24 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
 
   const requestPushPermission = async () => {
     if (!browserPushEnabled || !canUseBrowserNotifications()) {
+      setBrowserRuntimeStatus(getBrowserRuntimeStatus());
       return;
     }
     if (window.Notification.permission !== "default") {
-      setPermission(window.Notification.permission);
+      setBrowserRuntimeStatus(getBrowserRuntimeStatus());
       return;
     }
 
-    const nextPermission = await window.Notification.requestPermission();
-    setPermission(nextPermission);
+    await window.Notification.requestPermission();
+    setBrowserRuntimeStatus(getBrowserRuntimeStatus());
   };
 
-  const pushButtonDisabled = !browserPushEnabled || permission === "granted" || permission === "denied";
-  const pushPermissionBlocked = browserPushEnabled && permission === "denied";
-  const pushPermissionHelp = pushPermissionBlocked
-    ? "Enable notifications in browser site settings, then reload."
-    : !browserPushEnabled
-      ? "Browser push notifications disabled"
-      : permission === "granted"
-        ? "Browser push notifications enabled"
-        : "Enable browser push notifications";
+  const browserNotificationStatus = getBrowserNotificationStatus({
+    realtimeEnabled,
+    browserNotificationsEnabled: browserPushEnabled,
+    ...browserRuntimeStatus,
+    suppressWhenVisible: suppressBrowserNotificationsWhenVisible,
+  });
 
   return (
     <>
@@ -136,7 +199,7 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
         <RealtimeUpdates
           key={activeSlug ?? "all-projects"}
           activeSlug={activeSlug}
-          onHasUpdatesChange={setHasUpdates}
+          notificationBaselineAt={notificationBaselineAt}
           onNotifications={handleIncomingNotifications}
         />
       ) : null}
@@ -168,30 +231,24 @@ export function AppShell({ projects, activeSlug, notifications = [], children }:
                 <path d="M3 15h14" />
               </svg>
             </button>
-            {browserPushEnabled && permission === "default" ? (
-              <button
-                type="button"
-                onClick={requestPushPermission}
-                disabled={pushButtonDisabled}
-                title={pushPermissionHelp}
-                aria-label="Enable browser push notifications"
-                className={`inline-flex h-9 w-9 items-center justify-center rounded border border-zinc-300 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 ${
-                  pushButtonDisabled ? "cursor-not-allowed opacity-60" : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                }`}
-              >
-                <svg
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  className="h-4 w-4"
-                  aria-hidden="true"
+            <div
+              role="status"
+              aria-live="polite"
+              className={`flex min-w-0 flex-1 items-center gap-2 rounded border px-2 py-1 text-xs md:flex-none ${getStatusClass(
+                browserNotificationStatus,
+              )}`}
+            >
+              <span className="truncate">{browserNotificationStatus.message}</span>
+              {browserNotificationStatus.state === "permission-default" ? (
+                <button
+                  type="button"
+                  onClick={requestPushPermission}
+                  className="shrink-0 rounded border border-current px-2 py-0.5 font-medium hover:bg-white/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:hover:bg-black/20"
                 >
-                  <path d="M10 3.5a4 4 0 0 0-4 4V9c0 .86-.28 1.7-.8 2.4L4 13h12l-1.2-1.6A4 4 0 0 1 14 9V7.5a4 4 0 0 0-4-4Z" />
-                  <path d="M8 14a2 2 0 0 0 4 0" />
-                </svg>
-              </button>
-            ) : null}
+                  {browserNotificationStatus.actionLabel}
+                </button>
+              ) : null}
+            </div>
             <button
               type="button"
               onClick={() => setDrawerOpen((value) => !value)}

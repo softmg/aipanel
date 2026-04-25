@@ -111,11 +111,11 @@ AIPANEL_ALLOWED_DEV_ORIGINS=localhost,100.89.42.77 make dev
 AIPANEL_ALLOWED_DEV_ORIGINS=localhost,100.89.42.77
 ```
 
-## Browser push-уведомления (во вкладке)
+## Browser desktop alerts (во вкладке)
 
-Realtime-обновления и системные уведомления браузера включены по умолчанию. В интерфейсе нажмите `Enable push` и подтвердите permission в браузере.
+Realtime-обновления и browser desktop alerts включены по умолчанию. В интерфейсе нажмите `Enable desktop alerts` и подтвердите permission в браузере.
 
-Чтобы явно выключить realtime или системные уведомления:
+Чтобы явно выключить realtime или desktop alerts:
 
 ```bash
 NEXT_PUBLIC_AIPANEL_REALTIME_ENABLED=false
@@ -123,9 +123,10 @@ NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED=false
 ```
 
 Ограничения:
-- работает только при открытой вкладке aipanel;
+- Browser desktop alerts work while this aipanel tab is open.
 - при активной видимой вкладке OS-уведомления не показываются;
 - включён dedupe и rate-limit, чтобы не спамить повторяющимися событиями.
+- For always-on delivery, use Telegram or the macOS app later.
 
 ## Если данные не появились
 

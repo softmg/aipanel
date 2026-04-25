@@ -15,6 +15,7 @@ export type RealtimeNotificationItem = {
 
 type Props = {
   activeSlug?: string;
+  notificationBaselineAt?: string;
   onHasUpdatesChange?: (hasUpdates: boolean) => void;
   onNotifications?: (items: RealtimeNotificationItem[]) => void;
 };
@@ -34,7 +35,7 @@ function isRealtimeNotificationItem(value: unknown): value is RealtimeNotificati
   );
 }
 
-export function RealtimeUpdates({ activeSlug, onHasUpdatesChange, onNotifications }: Props) {
+export function RealtimeUpdates({ activeSlug, notificationBaselineAt, onHasUpdatesChange, onNotifications }: Props) {
   const [hasUpdates, setHasUpdates] = useState(false);
 
   useEffect(() => {
@@ -45,6 +46,9 @@ export function RealtimeUpdates({ activeSlug, onHasUpdatesChange, onNotification
     const url = new URL("/api/realtime", window.location.origin);
     if (activeSlug) {
       url.searchParams.set("activeSlug", activeSlug);
+    }
+    if (notificationBaselineAt) {
+      url.searchParams.set("since", notificationBaselineAt);
     }
 
     const eventSource = new EventSource(url);
@@ -81,7 +85,7 @@ export function RealtimeUpdates({ activeSlug, onHasUpdatesChange, onNotification
       eventSource.removeEventListener("notification", handleNotification as EventListener);
       eventSource.close();
     };
-  }, [activeSlug, onNotifications]);
+  }, [activeSlug, notificationBaselineAt, onNotifications]);
 
   return null;
 }

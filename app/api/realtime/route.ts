@@ -1,4 +1,11 @@
 import { z } from "zod";
+import {
+  MAX_NOTIFICATION_CURSOR_ID,
+  advanceNotificationCursor,
+  isNotificationNewerThanCursor,
+  parseRealtimeSinceParam,
+  type NotificationCursor,
+} from "@/app/api/realtime/notification-cursor";
 import { getProjectCards, getProjectDetail, getProjectNotifications } from "@/lib/services/aggregator";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 
@@ -6,6 +13,7 @@ export const dynamic = "force-dynamic";
 
 const searchSchema = z.object({
   activeSlug: z.string().regex(/^[a-z0-9-]+$/).optional(),
+  since: z.string().optional(),
 });
 
 type RealtimeNotificationPayload = Pick<
@@ -26,21 +34,10 @@ function toRealtimeNotificationPayload(notification: ClaudeNotification): Realti
   };
 }
 
-function emitNewNotifications(
-  payload: RealtimeNotificationPayload[],
-  knownIds: Set<string>,
-  write: (chunk: string) => void,
-): Set<string> {
-  const currentIds = new Set(payload.map((item) => item.id));
-
-  if (knownIds.size > 0) {
-    const newItems = payload.filter((item) => !knownIds.has(item.id));
-    if (newItems.length > 0) {
-      write(`event: notification\ndata: ${JSON.stringify({ items: newItems })}\n\n`);
-    }
+function emitNotifications(payload: RealtimeNotificationPayload[], write: (chunk: string) => void): void {
+  if (payload.length > 0) {
+    write(`event: notification\ndata: ${JSON.stringify({ items: payload })}\n\n`);
   }
-
-  return currentIds;
 }
 
 function buildSignature(
@@ -87,6 +84,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const parsed = searchSchema.safeParse({
     activeSlug: url.searchParams.get("activeSlug") ?? undefined,
+    since: url.searchParams.get("since") ?? undefined,
   });
 
   if (!parsed.success) {
@@ -98,13 +96,16 @@ export async function GET(request: Request) {
 
   const encoder = new TextEncoder();
   const activeSlug = parsed.data.activeSlug;
+  const sinceMs = parseRealtimeSinceParam(parsed.data.since ?? null);
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false;
       let inFlight = false;
       let lastSignature = "";
-      let lastNotificationIds = new Set<string>();
+      let notificationCursor: NotificationCursor | null =
+        sinceMs === null ? null : { createdAtMs: sinceMs, id: MAX_NOTIFICATION_CURSOR_ID };
+      let notificationCursorSeeded = sinceMs !== null;
 
       const write = (chunk: string) => {
         if (!closed) {
@@ -129,7 +130,16 @@ export async function GET(request: Request) {
           const signature = buildSignature(cards, detail) + JSON.stringify(notificationPayload);
 
           if (activeSlug) {
-            lastNotificationIds = emitNewNotifications(notificationPayload, lastNotificationIds, write);
+            if (notificationCursorSeeded && notificationCursor) {
+              emitNotifications(
+                notificationPayload.filter((notification) =>
+                  isNotificationNewerThanCursor(notification, notificationCursor as NotificationCursor),
+                ),
+                write,
+              );
+            }
+            notificationCursor = advanceNotificationCursor(notificationCursor, notificationPayload);
+            notificationCursorSeeded = true;
           }
 
           if (lastSignature && signature !== lastSignature) {

@@ -9,6 +9,7 @@ type Props = {
 
 export default async function ProjectPage({ params }: Props) {
   const { slug } = await params;
+  const notificationBaselineAt = new Date().toISOString();
 
   const [projects, detail, notifications] = await Promise.all([
     getProjectCards(),
@@ -21,7 +22,12 @@ export default async function ProjectPage({ params }: Props) {
   }
 
   return (
-    <AppShell projects={projects} activeSlug={slug} notifications={notifications}>
+    <AppShell
+      projects={projects}
+      activeSlug={slug}
+      notifications={notifications}
+      notificationBaselineAt={notificationBaselineAt}
+    >
       <ProjectDetail key={detail.project.slug} data={detail} />
     </AppShell>
   );
