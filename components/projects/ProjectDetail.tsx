@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatContextTokens, formatNumber, formatRelative } from "@/lib/format";
+import { ProjectNotificationControls, SessionNotificationControls } from "@/components/notifications/NotificationRuleControls";
 import { AgentOffice } from "@/components/projects/AgentOffice";
 import { TaskDetailDrawer } from "@/components/projects/TaskDetailDrawer";
 import type { ClaudeMemObservation } from "@/lib/sources/claude-mem/types";
@@ -459,6 +460,9 @@ export function ProjectDetail({ data }: Props) {
 
         {tab === "sessions" ? (
           <section id={sessionsPanelId} role="tabpanel" aria-labelledby={sessionsTabId}>
+            <div className="mb-3">
+              <ProjectNotificationControls projectSlug={data.project.slug} />
+            </div>
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-xs text-zinc-500">
                 {sessionsWithEmptyTitles > 0
@@ -507,30 +511,26 @@ export function ProjectDetail({ data }: Props) {
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex items-center gap-2">
-                              {session.memorySessionId ? (
-                                <button
-                                  type="button"
-                                  onClick={() => toggleSession(session.sessionId, session.memorySessionId)}
-                                  aria-expanded={isExpanded}
-                                  aria-controls={`session-observations-${session.sessionId}`}
-                                  aria-label={`${isExpanded ? "Collapse" : "Expand"} observations for ${session.title ?? session.sessionId}`}
-                                  title={isExpanded ? "Collapse observations" : "Expand observations"}
-                                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-zinc-300 text-zinc-600 transition hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                              <button
+                                type="button"
+                                onClick={() => toggleSession(session.sessionId, session.memorySessionId)}
+                                aria-expanded={isExpanded}
+                                aria-controls={`session-observations-${session.sessionId}`}
+                                aria-label={`${isExpanded ? "Collapse" : "Expand"} details for ${session.title ?? session.sessionId}`}
+                                title={isExpanded ? "Collapse details" : "Expand details"}
+                                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-zinc-300 text-zinc-600 transition hover:bg-zinc-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+                              >
+                                <svg
+                                  viewBox="0 0 20 20"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.5"
+                                  className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                                  aria-hidden="true"
                                 >
-                                  <svg
-                                    viewBox="0 0 20 20"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="1.5"
-                                    className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                                    aria-hidden="true"
-                                  >
-                                    <path d="M7 4l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-                                  </svg>
-                                </button>
-                              ) : (
-                                <span className="inline-flex h-6 w-6 shrink-0" aria-hidden="true" />
-                              )}
+                                  <path d="M7 4l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -579,6 +579,7 @@ export function ProjectDetail({ data }: Props) {
                           >
                             <td colSpan={8} className="px-4 py-4">
                               <div className="space-y-4">
+                                <SessionNotificationControls projectSlug={data.project.slug} sessionId={session.sessionId} />
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <p className="text-sm font-medium">Claude-mem observations</p>
                                   <a
