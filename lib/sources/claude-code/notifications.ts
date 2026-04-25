@@ -29,7 +29,7 @@ type CachedNotifications = {
   value: ClaudeNotification[];
 };
 
-export const CONTEXT_TOKENS_THRESHOLD = 500_000;
+export const DEFAULT_CONTEXT_TOKENS_THRESHOLD = 500_000;
 
 export type ContextThresholdSession = {
   sessionId: string;
@@ -175,14 +175,14 @@ function formatContextDetails(contextUsage: SessionContextUsage, threshold: numb
 }
 
 export function buildContextThresholdNotification(session: ContextThresholdSession): ClaudeNotification | null {
-  const threshold = session.contextTokensThreshold ?? CONTEXT_TOKENS_THRESHOLD;
+  const threshold = session.contextTokensThreshold ?? DEFAULT_CONTEXT_TOKENS_THRESHOLD;
   const contextTokens = session.contextUsage.contextTokens;
   if (contextTokens === null || contextTokens < threshold) {
     return null;
   }
 
   return {
-    id: `${session.sessionId}-context-tokens-${threshold}`,
+    id: `${session.sessionId}-context-tokens-${threshold}-${session.contextUsage.updatedAt ?? "unknown"}`,
     sessionId: session.sessionId,
     sessionLabel: buildFallbackSessionLabel(session.sessionId, session.title),
     projectSlug: session.projectSlug,

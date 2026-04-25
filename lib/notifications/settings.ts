@@ -5,6 +5,7 @@ import {
   notificationSettingsSchema,
   type NotificationSettings,
 } from "@/lib/notifications/schema";
+import { DEFAULT_CONTEXT_TOKENS_THRESHOLD } from "@/lib/sources/claude-code/notifications";
 
 const SETTINGS_FILE_NAME = "notification-settings.json";
 const DEFAULT_CONFIG_DIR_NAME = ".aipanel";
@@ -24,7 +25,7 @@ export function getDefaultNotificationSettings(): NotificationSettings {
       macos: false,
     },
     defaults: {
-      contextTokensThreshold: 500000,
+      contextTokensThreshold: DEFAULT_CONTEXT_TOKENS_THRESHOLD,
       suppressBrowserWhenVisible: true,
       rateLimit: {
         max: 3,

@@ -119,12 +119,44 @@ export async function getProjectCards(options: { includeBeads?: boolean } = {}):
   });
 }
 
+
+async function getNotificationsForProject(
+  project: { absolutePath: string; slug: string; name: string },
+  sessions: ProjectDetail["sessions"],
+): Promise<{ notifications: ProjectDetail["notifications"]; warning: string | null }> {
+  const [notifications, settings] = await Promise.all([
+    listNotificationsForProject(project.absolutePath).then(
+      (items) => ({ items, warning: null as string | null }),
+      () => ({ items: [], warning: "notification source unavailable" }),
+    ),
+    loadNotificationSettings(),
+  ]);
+
+  return {
+    notifications: withProjectMetadata(
+      mergeNotificationsWithContextThresholds(
+        notifications.items,
+        sessions.map((session) => ({
+          sessionId: session.sessionId,
+          title: session.title,
+          startedAt: session.startedAt,
+          contextUsage: session.contextUsage,
+          contextTokensThreshold: settings.defaults.contextTokensThreshold,
+        })),
+      ),
+      project,
+    ),
+    warning: notifications.warning,
+  };
+}
+
 async function getSessionsForProject(
   project: { absolutePath: string; slug: string },
+  options: { bypassCache?: boolean } = {},
 ): Promise<{ sessions: ProjectDetail["sessions"]; sessionWarnings: string[] }> {
   const cached = sessionCache.get(project.slug);
   const now = Date.now();
-  if (cached && now - cached.createdAt < CACHE_TTL_MS) {
+  if (!options.bypassCache && cached && now - cached.createdAt < CACHE_TTL_MS) {
     return { sessions: cached.sessions, sessionWarnings: cached.sessionWarnings };
   }
 
@@ -168,30 +200,18 @@ export async function getProjectDetail(slug: string): Promise<ProjectDetail | nu
     return null;
   }
 
-  const [{ sessions, sessionWarnings }, beads, notifications, settings] = await Promise.all([
+  const [{ sessions, sessionWarnings }, beads] = await Promise.all([
     getSessionsForProject(project),
     listTasksForProject(project.absolutePath).catch(() => null),
-    listNotificationsForProject(project.absolutePath).catch(() => []),
-    loadNotificationSettings(),
   ]);
-
-  const notificationsWithProject = withProjectMetadata(
-    mergeNotificationsWithContextThresholds(
-      notifications,
-      sessions.map((session) => ({
-        sessionId: session.sessionId,
-        title: session.title,
-        startedAt: session.startedAt,
-        contextUsage: session.contextUsage,
-        contextTokensThreshold: settings.defaults.contextTokensThreshold,
-      })),
-    ),
-    project,
-  );
+  const { notifications, warning: notificationWarning } = await getNotificationsForProject(project, sessions);
 
   const warnings = [...sessionWarnings];
   if (beads === null) {
     warnings.push("beads source unavailable");
+  }
+  if (notificationWarning) {
+    warnings.push(notificationWarning);
   }
 
   return {
@@ -202,7 +222,7 @@ export async function getProjectDetail(slug: string): Promise<ProjectDetail | nu
     },
     sessions,
     beads: beads ?? [],
-    notifications: notificationsWithProject,
+    notifications,
     warnings,
   };
 }
@@ -242,25 +262,8 @@ export async function getProjectNotifications(slug: string) {
     return [];
   }
 
-  const [{ sessions }, notifications, settings] = await Promise.all([
-    getSessionsForProject(project),
-    listNotificationsForProject(project.absolutePath).catch(() => []),
-    loadNotificationSettings(),
-  ]);
-
-  return withProjectMetadata(
-    mergeNotificationsWithContextThresholds(
-      notifications,
-      sessions.map((session) => ({
-        sessionId: session.sessionId,
-        title: session.title,
-        startedAt: session.startedAt,
-        contextUsage: session.contextUsage,
-        contextTokensThreshold: settings.defaults.contextTokensThreshold,
-      })),
-    ),
-    project,
-  );
+  const { sessions } = await getSessionsForProject(project, { bypassCache: true });
+  return (await getNotificationsForProject(project, sessions)).notifications;
 }
 
 export function clearAggregatorCache(): void {

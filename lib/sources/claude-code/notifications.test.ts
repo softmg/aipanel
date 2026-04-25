@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  CONTEXT_TOKENS_THRESHOLD,
+  DEFAULT_CONTEXT_TOKENS_THRESHOLD,
   buildContextThresholdNotification,
   clearClaudeCodeNotificationCache,
   mergeNotificationsWithContextThresholds,
@@ -104,7 +104,7 @@ describe("claude-code notifications", () => {
       title: "Primary coding session",
       startedAt: "2026-04-21T10:00:00.000Z",
       contextUsage: {
-        contextTokens: CONTEXT_TOKENS_THRESHOLD,
+        contextTokens: DEFAULT_CONTEXT_TOKENS_THRESHOLD,
         source: "estimated-from-latest-usage",
         updatedAt: "2026-04-21T10:05:00.000Z",
       },
@@ -112,15 +112,15 @@ describe("claude-code notifications", () => {
 
     expect(notification).not.toBeNull();
     expect(notification).toMatchObject({
-      id: `session-main-context-tokens-${CONTEXT_TOKENS_THRESHOLD}`,
+      id: `session-main-context-tokens-${DEFAULT_CONTEXT_TOKENS_THRESHOLD}-2026-04-21T10:05:00.000Z`,
       sessionId: "session-main",
       sessionLabel: "Primary coding session",
       createdAt: "2026-04-21T10:05:00.000Z",
       kind: "alert",
       status: "warning",
       source: "derived",
-      title: `Context threshold reached: ${CONTEXT_TOKENS_THRESHOLD.toLocaleString()} tokens`,
-      details: `Context tokens: ${CONTEXT_TOKENS_THRESHOLD.toLocaleString()}. Threshold: ${CONTEXT_TOKENS_THRESHOLD.toLocaleString()}.`,
+      title: `Context threshold reached: ${DEFAULT_CONTEXT_TOKENS_THRESHOLD.toLocaleString()} tokens`,
+      details: `Context tokens: ${DEFAULT_CONTEXT_TOKENS_THRESHOLD.toLocaleString()}. Threshold: ${DEFAULT_CONTEXT_TOKENS_THRESHOLD.toLocaleString()}.`,
     });
   });
 
@@ -130,7 +130,7 @@ describe("claude-code notifications", () => {
       title: "Primary coding session",
       startedAt: "2026-04-21T10:00:00.000Z",
       contextUsage: {
-        contextTokens: CONTEXT_TOKENS_THRESHOLD - 1,
+        contextTokens: DEFAULT_CONTEXT_TOKENS_THRESHOLD - 1,
         source: "estimated-from-latest-usage",
       },
     });
@@ -153,7 +153,7 @@ describe("claude-code notifications", () => {
   });
 
   it("merges context alerts with log notifications, dedupes ids, and sorts by time", () => {
-    const thresholdId = `session-main-context-tokens-${CONTEXT_TOKENS_THRESHOLD}`;
+    const thresholdId = `session-main-context-tokens-${DEFAULT_CONTEXT_TOKENS_THRESHOLD}-unknown`;
     const notifications: ClaudeNotification[] = [
       {
         id: thresholdId,
@@ -182,7 +182,7 @@ describe("claude-code notifications", () => {
         title: "Primary coding session",
         startedAt: "2026-04-21T10:02:00.000Z",
         contextUsage: {
-          contextTokens: CONTEXT_TOKENS_THRESHOLD,
+          contextTokens: DEFAULT_CONTEXT_TOKENS_THRESHOLD,
           source: "estimated-from-latest-usage",
         },
       },
@@ -191,7 +191,7 @@ describe("claude-code notifications", () => {
         title: "High total tokens, low context",
         startedAt: "2026-04-21T10:01:00.000Z",
         contextUsage: {
-          contextTokens: CONTEXT_TOKENS_THRESHOLD - 1,
+          contextTokens: DEFAULT_CONTEXT_TOKENS_THRESHOLD - 1,
           source: "estimated-from-latest-usage",
         },
       },
@@ -203,7 +203,7 @@ describe("claude-code notifications", () => {
       kind: "alert",
       source: "derived",
       sessionLabel: "Primary coding session",
-      details: `Context tokens: ${CONTEXT_TOKENS_THRESHOLD.toLocaleString()}. Threshold: ${CONTEXT_TOKENS_THRESHOLD.toLocaleString()}.`,
+      details: `Context tokens: ${DEFAULT_CONTEXT_TOKENS_THRESHOLD.toLocaleString()}. Threshold: ${DEFAULT_CONTEXT_TOKENS_THRESHOLD.toLocaleString()}.`,
     });
   });
 
@@ -234,7 +234,7 @@ describe("claude-code notifications", () => {
           sessionId: "s-3",
           title: "Threshold",
           startedAt: "2026-04-21T10:00:00.000Z",
-          contextUsage: { contextTokens: CONTEXT_TOKENS_THRESHOLD, source: "estimated-from-latest-usage" },
+          contextUsage: { contextTokens: DEFAULT_CONTEXT_TOKENS_THRESHOLD, source: "estimated-from-latest-usage" },
         },
       ],
       { limit: 1 },

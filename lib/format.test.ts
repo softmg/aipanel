@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { formatNumber, formatRelative } from "@/lib/format";
+import { formatContextTokens, formatNumber, formatRelative } from "@/lib/format";
 
 describe("formatNumber", () => {
   it("formats with grouping", () => {
@@ -31,5 +31,21 @@ describe("formatRelative", () => {
     vi.setSystemTime(new Date("2026-04-19T12:00:00.000Z"));
     expect(formatRelative("2026-04-16T12:00:00.000Z")).toBe("3d ago");
     vi.useRealTimers();
+  });
+});
+
+describe("formatContextTokens", () => {
+  it("returns dash for unavailable values", () => {
+    expect(formatContextTokens(null)).toBe("—");
+    expect(formatContextTokens(undefined)).toBe("—");
+  });
+
+  it("formats raw values below one thousand", () => {
+    expect(formatContextTokens(999)).toBe("999");
+  });
+
+  it("formats thousands compactly", () => {
+    expect(formatContextTokens(1000)).toBe("1k");
+    expect(formatContextTokens(123456)).toBe("123k");
   });
 });

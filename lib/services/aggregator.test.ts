@@ -194,6 +194,21 @@ describe("aggregator", () => {
     );
   });
 
+
+  it("adds a project detail warning when notification source is unavailable", async () => {
+    vi.spyOn(claudeCodeSource, "listNotificationsForProject").mockRejectedValue(new Error("unavailable"));
+
+    await withTempConfig(
+      JSON.stringify({
+        projects: [{ name: "Demo", path: "/tmp/demo" }],
+      }),
+      async () => {
+        const detail = await getProjectDetail("demo");
+        expect(detail?.warnings).toContain("notification source unavailable");
+      },
+    );
+  });
+
   it("adds project metadata to project notifications", async () => {
     vi.spyOn(claudeCodeSource, "listNotificationsForProject").mockResolvedValue([
       {
@@ -292,6 +307,38 @@ describe("aggregator", () => {
       async () => {
         const notifications = await getProjectNotifications("demo");
         expect(notifications).toEqual([]);
+      },
+    );
+  });
+
+
+  it("uses fresh sessions for project notifications instead of cached detail sessions", async () => {
+    const listSessions = vi.spyOn(claudeCodeSource, "listSessionsForProject");
+    listSessions.mockResolvedValueOnce([
+      createSession({
+        sessionId: "s-threshold",
+        contextUsage: { contextTokens: 499_999, source: "estimated-from-latest-usage" },
+      }),
+    ]);
+    listSessions.mockResolvedValueOnce([
+      createSession({
+        sessionId: "s-threshold",
+        contextUsage: { contextTokens: 500_000, source: "estimated-from-latest-usage" },
+      }),
+    ]);
+    vi.spyOn(claudeCodeSource, "listNotificationsForProject").mockResolvedValue([]);
+
+    await withTempConfig(
+      JSON.stringify({
+        projects: [{ name: "Demo", path: "/tmp/demo" }],
+      }),
+      async () => {
+        await expect(getProjectDetail("demo")).resolves.not.toBeNull();
+
+        const notifications = await getProjectNotifications("demo");
+        expect(listSessions).toHaveBeenCalledTimes(2);
+        expect(notifications).toHaveLength(1);
+        expect(notifications[0]).toMatchObject({ sessionId: "s-threshold", kind: "alert" });
       },
     );
   });
