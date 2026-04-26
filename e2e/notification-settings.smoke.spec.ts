@@ -30,7 +30,9 @@ test("@smoke global notification settings copy is correct", async ({ page }) => 
   await expect(dialog.getByLabel("Enable notifications")).toBeVisible();
   await expect(dialog.getByLabel("Context tokens exceed")).toBeVisible();
   await expect(dialog.getByLabel("Browser desktop alert")).toBeVisible();
-  await expect(dialog.getByLabel("Telegram")).toBeVisible();
+  await expect(dialog.getByLabel("Telegram task completion")).toBeVisible();
+  await expect(dialog.getByText("Telegram sends only task-completion alerts. Permission/tool requests stay in the in-app drawer.")).toBeVisible();
+  await expect(dialog.getByText("Telegram sends aipanel alerts through your own Telegram bot.")).toHaveCount(0);
 
   await expect(dialog.getByText("Push", { exact: true })).toHaveCount(0);
   await expect(dialog.getByText("Project notifications")).toHaveCount(0);

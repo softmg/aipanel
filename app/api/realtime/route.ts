@@ -6,6 +6,7 @@ import {
   parseRealtimeSinceParam,
   type NotificationCursor,
 } from "@/app/api/realtime/notification-cursor";
+import { dispatchTelegramTaskCompletionNotifications } from "@/lib/notifications/telegram-task-dispatcher";
 import { getProjectCards, getProjectDetail, getProjectNotifications } from "@/lib/services/aggregator";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 
@@ -130,15 +131,19 @@ export async function GET(request: Request) {
           const signature = buildSignature(cards, detail) + JSON.stringify(notificationPayload);
 
           if (activeSlug) {
-            if (notificationCursorSeeded && notificationCursor) {
-              emitNotifications(
-                notificationPayload.filter((notification) =>
-                  isNotificationNewerThanCursor(notification, notificationCursor as NotificationCursor),
-                ),
-                write,
-              );
+            const newNotifications = notificationCursorSeeded && notificationCursor
+              ? notifications.filter((notification) =>
+                isNotificationNewerThanCursor(notification, notificationCursor as NotificationCursor),
+              )
+              : [];
+
+            emitNotifications(newNotifications.map(toRealtimeNotificationPayload), write);
+
+            if (newNotifications.length > 0) {
+              void dispatchTelegramTaskCompletionNotifications(newNotifications).catch(() => undefined);
             }
-            notificationCursor = advanceNotificationCursor(notificationCursor, notificationPayload);
+
+            notificationCursor = advanceNotificationCursor(notificationCursor, notifications);
             notificationCursorSeeded = true;
           }
 

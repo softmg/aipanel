@@ -403,18 +403,18 @@ export function GlobalNotificationSettingsPanel() {
                   onChange={(event) => updateChannel("telegram", event.target.checked)}
                   className="h-4 w-4 rounded border-zinc-300 disabled:opacity-60"
                 />
-                <span>Telegram</span>
+                <span>Telegram task completion</span>
               </label>
             </div>
             {!telegramStatus.configured ? (
-              <p className="text-xs text-zinc-500">Configure Telegram first to enable this channel.</p>
+              <p className="text-xs text-zinc-500">Configure Telegram first.</p>
             ) : null}
           </fieldset>
 
           <div className="rounded border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
             <h4 className="text-xs font-semibold text-zinc-800 dark:text-zinc-100">Telegram</h4>
             <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
-              Telegram sends aipanel alerts through your own Telegram bot.
+              Telegram sends only task-completion alerts. Permission/tool requests stay in the in-app drawer.
             </p>
             <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs text-zinc-600 dark:text-zinc-300">
               <li>Create a bot with BotFather.</li>

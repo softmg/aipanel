@@ -15,7 +15,18 @@ vi.mock("@/lib/services/aggregator", () => ({
   getProjectNotifications: vi.fn(),
 }));
 
+vi.mock("@/lib/notifications/telegram-task-dispatcher", () => ({
+  dispatchTelegramTaskCompletionNotifications: vi.fn().mockResolvedValue({
+    considered: 0,
+    eligible: 0,
+    sent: 0,
+    skipped: 0,
+    failed: 0,
+  }),
+}));
+
 const aggregator = vi.mocked(await import("@/lib/services/aggregator"));
+const telegramDispatcher = vi.mocked(await import("@/lib/notifications/telegram-task-dispatcher"));
 
 type SseEvent = {
   event: string;
@@ -99,6 +110,13 @@ async function readEvents(stream: Awaited<ReturnType<typeof openRealtime>>): Pro
 describe("GET /api/realtime", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    telegramDispatcher.dispatchTelegramTaskCompletionNotifications.mockResolvedValue({
+      considered: 0,
+      eligible: 0,
+      sent: 0,
+      skipped: 0,
+      failed: 0,
+    });
   });
 
   it("returns 400 for invalid active slug", async () => {
@@ -128,6 +146,7 @@ describe("GET /api/realtime", () => {
     try {
       const events = await readEvents(stream);
       expect(events.map((event) => event.event)).toEqual(["ready"]);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
     }
@@ -140,6 +159,7 @@ describe("GET /api/realtime", () => {
     try {
       const events = await readEvents(stream);
       expect(events.map((event) => event.event)).toEqual(["ready"]);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
     }
@@ -174,6 +194,10 @@ describe("GET /api/realtime", () => {
           },
         ],
       });
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledTimes(1);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledWith([
+        expect.objectContaining({ id: "new" }),
+      ]);
     } finally {
       await stream.close();
     }
@@ -193,6 +217,7 @@ describe("GET /api/realtime", () => {
     try {
       const events = await readEvents(stream);
       expect(events.map((event) => event.event)).toEqual(["ready"]);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
     }
@@ -217,6 +242,10 @@ describe("GET /api/realtime", () => {
       expect(notificationEvents.map((event) => event.event)).toEqual(["notification"]);
       expect(updateEvents.map((event) => event.event)).toEqual(["update"]);
       expect(notificationEvents[0]?.data).toMatchObject({ items: [{ id: "new" }] });
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledTimes(1);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledWith([
+        expect.objectContaining({ id: "new" }),
+      ]);
     } finally {
       await stream.close();
       vi.useRealTimers();
@@ -239,9 +268,108 @@ describe("GET /api/realtime", () => {
       await vi.advanceTimersByTimeAsync(3000);
       const events = await readEvents(stream);
       expect(events.map((event) => event.event)).toEqual(["update"]);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
       vi.useRealTimers();
+    }
+  });
+
+  it("invokes Telegram dispatcher for new task-completion notifications", async () => {
+    const taskNotification = createNotification("task-complete", "2026-04-25T10:00:01.000Z");
+    taskNotification.kind = "task";
+    taskNotification.status = "completed";
+    taskNotification.title = "Build finished";
+
+    setupRealtimeMocks([[taskNotification]]);
+    const stream = await openRealtime("http://localhost/api/realtime?activeSlug=aipanel&since=2026-04-25T10:00:00.000Z");
+
+    try {
+      expect((await readEvents(stream)).map((event) => event.event)).toEqual(["notification"]);
+      expect((await readEvents(stream)).map((event) => event.event)).toEqual(["ready"]);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledTimes(1);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledWith([
+        expect.objectContaining({ id: "task-complete", kind: "task", status: "completed" }),
+      ]);
+    } finally {
+      await stream.close();
+    }
+  });
+
+  it("does not dispatch Telegram for permission notification when no new items are emitted", async () => {
+    setupRealtimeMocks([[createNotification("permission-old", "2026-04-25T10:00:00.000Z")]]);
+    const stream = await openRealtime("http://localhost/api/realtime?activeSlug=aipanel&since=2026-04-25T10:00:00.000Z");
+
+    try {
+      const events = await readEvents(stream);
+      expect(events.map((event) => event.event)).toEqual(["ready"]);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
+    } finally {
+      await stream.close();
+    }
+  });
+
+  it("keeps SSE notification events when Telegram dispatcher fails", async () => {
+    telegramDispatcher.dispatchTelegramTaskCompletionNotifications.mockRejectedValueOnce(new Error("dispatch failed"));
+
+    setupRealtimeMocks([[createNotification("new", "2026-04-25T10:00:01.000Z")]]);
+    const stream = await openRealtime("http://localhost/api/realtime?activeSlug=aipanel&since=2026-04-25T10:00:00.000Z");
+
+    try {
+      const notificationEvents = await readEvents(stream);
+      const readyEvents = await readEvents(stream);
+      expect(notificationEvents.map((event) => event.event)).toEqual(["notification"]);
+      expect(readyEvents.map((event) => event.event)).toEqual(["ready"]);
+      expect(notificationEvents[0]?.data).toMatchObject({ items: [{ id: "new" }] });
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledTimes(1);
+    } finally {
+      await stream.close();
+    }
+  });
+
+  it("dispatches only notifications newer than valid since baseline", async () => {
+    setupRealtimeMocks([
+      [
+        createNotification("new-1", "2026-04-25T10:00:02.000Z"),
+        createNotification("old-1", "2026-04-25T09:59:59.000Z"),
+      ],
+    ]);
+
+    const stream = await openRealtime("http://localhost/api/realtime?activeSlug=aipanel&since=2026-04-25T10:00:00.000Z");
+
+    try {
+      expect((await readEvents(stream)).map((event) => event.event)).toEqual(["notification"]);
+      expect((await readEvents(stream)).map((event) => event.event)).toEqual(["ready"]);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledTimes(1);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledWith([
+        expect.objectContaining({ id: "new-1" }),
+      ]);
+    } finally {
+      await stream.close();
+    }
+  });
+
+  it("does not dispatch historical notifications on first load when since is invalid", async () => {
+    setupRealtimeMocks([[createNotification("historical", "2026-04-25T10:00:00.000Z")]]);
+    const stream = await openRealtime("http://localhost/api/realtime?activeSlug=aipanel&since=invalid");
+
+    try {
+      expect((await readEvents(stream)).map((event) => event.event)).toEqual(["ready"]);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
+    } finally {
+      await stream.close();
+    }
+  });
+
+  it("does not dispatch historical notifications on first load when since is absent", async () => {
+    setupRealtimeMocks([[createNotification("historical", "2026-04-25T10:00:00.000Z")]]);
+    const stream = await openRealtime("http://localhost/api/realtime?activeSlug=aipanel");
+
+    try {
+      expect((await readEvents(stream)).map((event) => event.event)).toEqual(["ready"]);
+      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
+    } finally {
+      await stream.close();
     }
   });
 
