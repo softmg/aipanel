@@ -3,7 +3,6 @@
 import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatContextTokens, formatNumber, formatRelative } from "@/lib/format";
-import { ProjectNotificationControls, SessionNotificationControls } from "@/components/notifications/NotificationRuleControls";
 import { AgentOffice } from "@/components/projects/AgentOffice";
 import { TaskDetailDrawer } from "@/components/projects/TaskDetailDrawer";
 import type { ClaudeMemObservation } from "@/lib/sources/claude-mem/types";
@@ -460,9 +459,6 @@ export function ProjectDetail({ data }: Props) {
 
         {tab === "sessions" ? (
           <section id={sessionsPanelId} role="tabpanel" aria-labelledby={sessionsTabId}>
-            <div className="mb-3">
-              <ProjectNotificationControls projectSlug={data.project.slug} />
-            </div>
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-xs text-zinc-500">
                 {sessionsWithEmptyTitles > 0
@@ -579,7 +575,6 @@ export function ProjectDetail({ data }: Props) {
                           >
                             <td colSpan={8} className="px-4 py-4">
                               <div className="space-y-4">
-                                <SessionNotificationControls projectSlug={data.project.slug} sessionId={session.sessionId} />
                                 <div className="flex flex-wrap items-center justify-between gap-2">
                                   <p className="text-sm font-medium">Claude-mem observations</p>
                                   <a

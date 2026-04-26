@@ -95,7 +95,7 @@ export function AppShell({ projects, activeSlug, notifications = [], notificatio
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const realtimeEnabled = process.env.NEXT_PUBLIC_AIPANEL_REALTIME_ENABLED !== "false";
-  const browserPushEnabled = process.env.NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED !== "false";
+  const browserDesktopAlertsEnabled = process.env.NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED !== "false";
   const [pendingSlug, setPendingSlug] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -131,7 +131,7 @@ export function AppShell({ projects, activeSlug, notifications = [], notificatio
 
   const handleIncomingNotifications = (items: RealtimeNotificationItem[]) => {
     const runtimeStatus = getBrowserRuntimeStatus();
-    if (!browserPushEnabled || !runtimeStatus.notificationSupported) {
+    if (!browserDesktopAlertsEnabled || !runtimeStatus.notificationSupported) {
       return;
     }
     if (runtimeStatus.permission !== "granted") {
@@ -153,7 +153,7 @@ export function AppShell({ projects, activeSlug, notifications = [], notificatio
       if (
         !shouldShowBrowserDesktopAlert({
           realtimeEnabled,
-          browserNotificationsEnabled: browserPushEnabled,
+          browserNotificationsEnabled: browserDesktopAlertsEnabled,
           notificationSupported: runtimeStatus.notificationSupported,
           permission: runtimeStatus.permission,
           visibilityState: runtimeStatus.visibilityState,
@@ -172,8 +172,8 @@ export function AppShell({ projects, activeSlug, notifications = [], notificatio
     }
   };
 
-  const requestPushPermission = async () => {
-    if (!browserPushEnabled || !canUseBrowserNotifications()) {
+  const requestBrowserPermission = async () => {
+    if (!browserDesktopAlertsEnabled || !canUseBrowserNotifications()) {
       setBrowserRuntimeStatus(getBrowserRuntimeStatus());
       return;
     }
@@ -188,7 +188,7 @@ export function AppShell({ projects, activeSlug, notifications = [], notificatio
 
   const browserNotificationStatus = getBrowserNotificationStatus({
     realtimeEnabled,
-    browserNotificationsEnabled: browserPushEnabled,
+    browserNotificationsEnabled: browserDesktopAlertsEnabled,
     ...browserRuntimeStatus,
     suppressWhenVisible: suppressBrowserNotificationsWhenVisible,
   });
@@ -242,7 +242,7 @@ export function AppShell({ projects, activeSlug, notifications = [], notificatio
               {browserNotificationStatus.state === "permission-default" ? (
                 <button
                   type="button"
-                  onClick={requestPushPermission}
+                  onClick={requestBrowserPermission}
                   className="shrink-0 rounded border border-current px-2 py-0.5 font-medium hover:bg-white/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 dark:hover:bg-black/20"
                 >
                   {browserNotificationStatus.actionLabel}

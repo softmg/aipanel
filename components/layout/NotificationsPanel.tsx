@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { GlobalNotificationSettingsPanel } from "@/components/notifications/GlobalNotificationSettingsPanel";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 
 type Props = {
@@ -101,7 +102,9 @@ export function NotificationsPanel({ notifications, open, onClose }: Props) {
           </button>
         </header>
 
-        <div className="flex-1 overflow-auto p-3">
+        <div className="flex-1 space-y-3 overflow-auto p-3">
+          <GlobalNotificationSettingsPanel />
+
           {notifications.length === 0 ? (
             <div className="rounded border border-dashed border-zinc-300 p-3 text-xs text-zinc-500 dark:border-zinc-700">
               No notifications yet.

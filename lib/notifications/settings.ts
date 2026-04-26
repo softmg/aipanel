@@ -38,6 +38,9 @@ export function getDefaultNotificationSettings(): NotificationSettings {
         scope: "global",
         enabled: true,
         kinds: ["question", "permission", "task", "alert"],
+        thresholds: {
+          contextTokens: DEFAULT_CONTEXT_TOKENS_THRESHOLD,
+        },
         channels: {
           inApp: true,
           browser: true,

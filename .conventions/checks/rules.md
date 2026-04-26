@@ -18,3 +18,4 @@
 - Compact Agent Team badges must preserve the `Team N` row label and expose agent names, token totals, and Active/Idle state on hover and keyboard focus.
 - Session title refresh controls must be explicit buttons with focus-visible styles and must not render blank title cells when no source text exists.
 - Notification context thresholds must use latest request context usage, not cumulative session token totals.
+- Notification settings UI must stay global in the AppShell notification drawer; do not add project-scoped or session-scoped notification controls.
