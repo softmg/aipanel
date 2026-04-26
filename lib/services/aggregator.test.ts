@@ -14,12 +14,15 @@ import type { ClaudeSessionSummary } from "@/lib/sources/claude-code/types";
 import * as claudeMemSource from "@/lib/sources/claude-mem";
 
 const originalEnv = process.env.AIPANEL_CONFIG;
+const originalConfigDirEnv = process.env.AIPANEL_CONFIG_DIR;
 
 async function withTempConfig(content: string, run: () => Promise<void>) {
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-aggregator-test-"));
   const configPath = path.join(tempRoot, "projects.json");
+  const configDir = path.join(tempRoot, "config-dir");
   await fs.writeFile(configPath, content, "utf8");
   process.env.AIPANEL_CONFIG = configPath;
+  process.env.AIPANEL_CONFIG_DIR = configDir;
 
   try {
     await run();
@@ -29,6 +32,11 @@ async function withTempConfig(content: string, run: () => Promise<void>) {
       process.env.AIPANEL_CONFIG = originalEnv;
     } else {
       delete process.env.AIPANEL_CONFIG;
+    }
+    if (originalConfigDirEnv) {
+      process.env.AIPANEL_CONFIG_DIR = originalConfigDirEnv;
+    } else {
+      delete process.env.AIPANEL_CONFIG_DIR;
     }
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
@@ -311,6 +319,44 @@ describe("aggregator", () => {
     );
   });
 
+  it("builds threshold alerts from latest context usage even when cumulative totals are low", async () => {
+    vi.spyOn(claudeCodeSource, "listSessionsForProject").mockResolvedValue([
+      createSession({
+        sessionId: "s-context-high",
+        startedAt: "2026-04-21T09:00:00.000Z",
+        usageSplit: {
+          main: { inputTokens: 10_000, outputTokens: 10 },
+          agents: { inputTokens: 20_000, outputTokens: 20 },
+          total: { inputTokens: 30_000, outputTokens: 30 },
+        },
+        contextUsage: {
+          contextTokens: 500_000,
+          source: "estimated-from-latest-usage",
+        },
+      }),
+    ]);
+    vi.spyOn(claudeCodeSource, "listNotificationsForProject").mockResolvedValue([]);
+
+    await withTempConfig(
+      JSON.stringify({
+        projects: [{ name: "Demo", path: "/tmp/demo" }],
+      }),
+      async () => {
+        const notifications = await getProjectNotifications("demo");
+        expect(notifications).toHaveLength(1);
+        expect(notifications[0]).toMatchObject({
+          sessionId: "s-context-high",
+          kind: "alert",
+          source: "derived",
+        });
+        expect(notifications[0]?.title).toContain("Context threshold reached:");
+        expect(notifications[0]?.title).toContain("500");
+        expect(notifications[0]?.details).toContain("Context tokens:");
+        expect(notifications[0]?.details).toContain("Threshold:");
+        expect(notifications[0]?.details).toContain("500");
+      },
+    );
+  });
 
   it("uses fresh sessions for project notifications instead of cached detail sessions", async () => {
     const listSessions = vi.spyOn(claudeCodeSource, "listSessionsForProject");
