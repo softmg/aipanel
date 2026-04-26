@@ -19,7 +19,14 @@ Run the relevant checks after code changes:
 pnpm typecheck
 pnpm lint
 pnpm test
+pnpm e2e:smoke
 pnpm build
+```
+
+For larger release/merge checks, run:
+
+```bash
+pnpm e2e
 ```
 
 For small documentation-only edits, `pnpm typecheck` is usually enough unless surrounding code changed.

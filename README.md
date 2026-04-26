@@ -97,6 +97,36 @@ make dev
 
 Откройте URL из терминала (например, `http://localhost:3000`).
 
+## E2E-проверки (Playwright)
+
+Фаза/итерация разработки:
+
+```bash
+pnpm e2e:smoke
+```
+
+Полный прогон E2E:
+
+```bash
+pnpm e2e
+```
+
+Запуск с UI/headed:
+
+```bash
+pnpm e2e:headed
+pnpm e2e:ui
+```
+
+Если не установлены браузерные бинарники Playwright:
+
+```bash
+pnpm exec playwright install chromium
+```
+
+E2E запускаются на `http://127.0.0.1:3107` и используют изолированный конфиг `AIPANEL_CONFIG_DIR=.tmp/e2e/aipanel`.
+Эти smoke-тесты не отправляют реальные Telegram-сообщения.
+
 ## LAN-запуск (опционально)
 
 Разовый запуск с переменной окружения:

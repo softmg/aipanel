@@ -488,6 +488,7 @@ export function GlobalNotificationSettingsPanel() {
               type="button"
               onClick={() => void save()}
               disabled={!canSave}
+              aria-label="Save global notification settings"
               className="rounded border border-zinc-300 px-3 py-1.5 text-xs transition hover:bg-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
             >
               {saveState === "saving" ? "Saving…" : "Save"}

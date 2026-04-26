@@ -55,3 +55,7 @@ projects.json
 
 # local verification screenshots
 mobile-header-*.png
+
+# e2e runtime artifacts
+/.tmp/e2e/
+/test-results/
