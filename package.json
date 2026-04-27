@@ -12,7 +12,9 @@
     "e2e": "playwright test",
     "e2e:smoke": "playwright test --project=chromium --grep @smoke",
     "e2e:headed": "playwright test --headed",
-    "e2e:ui": "playwright test --ui"
+    "e2e:ui": "playwright test --ui",
+    "notify": "tsx scripts/aipanel-notifier.ts",
+    "notify:once": "tsx scripts/aipanel-notifier.ts --once"
   },
   "dependencies": {
     "@types/better-sqlite3": "^7.6.13",
@@ -31,6 +33,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "typescript": "^5",
     "vitest": "^4.1.4"
   }

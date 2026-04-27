@@ -156,10 +156,48 @@ NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED=false
 - Browser desktop alerts work while this aipanel tab is open.
 - при активной видимой вкладке OS-уведомления не показываются;
 - включён dedupe и rate-limit, чтобы не спамить повторяющимися событиями.
-- For always-on delivery, use Telegram or the macOS app later.
+- For always-on delivery, use Telegram daemon (see below).
+
+## Telegram notifier daemon (always-on)
+
+Для always-on Telegram-доставки без открытой вкладки aipanel запустите локальный daemon:
+
+```bash
+pnpm notify
+```
+
+Разовый безопасный запуск (без historical spam по умолчанию):
+
+```bash
+pnpm notify:once
+```
+
+Daemon отправляет в Telegram **только task-completion** уведомления.
+Не отправляются permission/tool/Bash, question и context-threshold alert уведомления.
+
+Поведение:
+- daemon использует тот же dispatcher, что и `/api/realtime`;
+- dedupe между realtime и daemon обеспечивается общим delivery log;
+- первый scan устанавливает baseline и не отправляет исторические завершения;
+- завершения, случившиеся пока daemon был офлайн, по умолчанию не отправляются;
+- catch-up режим может быть добавлен позже.
+
+Секреты Telegram хранятся в:
+- `~/.aipanel/notification-secrets.json`
+
+Delivery log хранится в:
+- `~/.aipanel/notification-delivery-log.sqlite`
+
+Если `concurrently` не установлен, запускайте в двух терминалах:
+1. `pnpm dev`
+2. `pnpm notify`
 
 ## Если данные не появились
 
+- Daemon не запущен: стартуйте `pnpm notify`.
+- Нет Telegram-доставки: проверьте global Notification settings и Telegram credentials.
+- Проверка without-send: используйте `pnpm notify:once --dry-run`.
 - Нет beads-задач: проверьте `bd --version`, наличие `.beads/` и вывод `bd list --all --format json`.
 - Нет observations из claude-mem: проверьте наличие `~/.claude-mem/claude-mem.db`.
 - Проект не виден в sidebar: проверьте `projects.json` и поле `"enabled": true`.
+

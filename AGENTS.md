@@ -23,6 +23,12 @@ pnpm e2e:smoke
 pnpm build
 ```
 
+После изменений в Telegram daemon можно дополнительно выполнить manual smoke:
+
+```bash
+pnpm notify:once --dry-run
+```
+
 For larger release/merge checks, run:
 
 ```bash
@@ -38,6 +44,8 @@ For small documentation-only edits, `pnpm typecheck` is usually enough unless su
 - Notification sources currently come from Claude Code JSONL-derived `question`, `permission`, `task`, and `alert` notifications.
 - `AppShell` owns browser notification permission and client-side delivery.
 - `/api/realtime` streams notification events for the active project.
+- Local always-on Telegram delivery is handled by `pnpm notify` daemon (`scripts/aipanel-notifier.ts`) and must reuse `dispatchTelegramTaskCompletionNotifications`.
+- Daemon sends only task-completion Telegram alerts; it must not send permission/question/alert events.
 - Keep Telegram bot tokens server-side only.
 - Do not store secrets in `localStorage`, client React state, `NEXT_PUBLIC_*` env vars, or repository-tracked files.
 

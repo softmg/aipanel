@@ -6,7 +6,7 @@ import {
   getNotificationCursor,
   isNotificationNewerThanCursor,
   parseRealtimeSinceParam,
-} from "@/app/api/realtime/notification-cursor";
+} from "@/lib/notifications/notification-cursor";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 
 vi.mock("@/lib/services/aggregator", () => ({

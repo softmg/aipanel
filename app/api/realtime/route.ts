@@ -5,7 +5,7 @@ import {
   isNotificationNewerThanCursor,
   parseRealtimeSinceParam,
   type NotificationCursor,
-} from "@/app/api/realtime/notification-cursor";
+} from "@/lib/notifications/notification-cursor";
 import { dispatchTelegramTaskCompletionNotifications } from "@/lib/notifications/telegram-task-dispatcher";
 import { getProjectCards, getProjectDetail, getProjectNotifications } from "@/lib/services/aggregator";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
