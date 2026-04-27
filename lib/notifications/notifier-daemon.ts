@@ -14,6 +14,7 @@ import {
   dispatchTelegramHumanInterventionNotifications,
   type TelegramHumanInterventionDispatchSummary,
 } from "@/lib/notifications/telegram-human-intervention-dispatcher";
+import { dispatchMacOSHumanInterventionNotifications } from "@/lib/notifications/macos-human-intervention-dispatcher";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 
 export type NotifierDaemonOptions = {
@@ -69,6 +70,7 @@ export type NotifierDependencies = {
   loadProjects: typeof loadProjectsConfig;
   getProjectNotifications: typeof getProjectNotifications;
   dispatchTelegram: typeof dispatchTelegramHumanInterventionNotifications;
+  dispatchMacos: typeof dispatchMacOSHumanInterventionNotifications;
   loadSettings: typeof loadNotificationSettings;
   loadSecrets: typeof loadNotificationSecrets;
 };
@@ -103,6 +105,7 @@ export function createNotifierDefaultDependencies(): NotifierDependencies {
     loadProjects: loadProjectsConfig,
     getProjectNotifications,
     dispatchTelegram: dispatchTelegramHumanInterventionNotifications,
+    dispatchMacos: dispatchMacOSHumanInterventionNotifications,
     loadSettings: loadNotificationSettings,
     loadSecrets: loadNotificationSecrets,
 
@@ -134,6 +137,20 @@ function sumDispatch(
 
 function stringifyError(error: unknown): string {
   return sanitizeDeliveryError(error);
+}
+
+function countHumanInterventionEligible(notifications: ClaudeNotification[]): number {
+  return notifications.filter((notification) => isHumanInterventionNotification(notification)).length;
+}
+
+function createDispatchSkippedSummary(notifications: ClaudeNotification[]): TelegramHumanInterventionDispatchSummary {
+  return {
+    considered: notifications.length,
+    eligible: 0,
+    sent: 0,
+    skipped: notifications.length,
+    failed: 0,
+  };
 }
 
 function toIntervalMs(intervalMs: number | undefined): number {
@@ -223,18 +240,25 @@ export async function scanNotifierProjects(
         if (options.dryRun) {
           dispatchSummary = {
             considered: newNotifications.length,
-            eligible: 0,
+            eligible: countHumanInterventionEligible(newNotifications),
             sent: 0,
             skipped: newNotifications.length,
             failed: 0,
           };
         } else {
-          dispatchSummary = await dependencies.dispatchTelegram(newNotifications, { configDir: options.configDir });
+          const telegramSummary = await dependencies.dispatchTelegram(newNotifications, { configDir: options.configDir }).catch(() =>
+            createDispatchSkippedSummary(newNotifications),
+          );
+          const macosSummary = await dependencies.dispatchMacos(newNotifications, {
+            configDir: options.configDir,
+            dryRun: false,
+          }).catch(() => createDispatchSkippedSummary(newNotifications));
+          dispatchSummary = sumDispatch(telegramSummary, macosSummary);
         }
       }
 
       if (options.dryRun && newNotifications.length > 0) {
-        dispatchSummary.eligible = newNotifications.filter((notification) => isHumanInterventionNotification(notification)).length;
+        dispatchSummary.eligible = countHumanInterventionEligible(newNotifications);
       }
 
       const nextCursor = advanceNotificationCursor(cursor, notifications);

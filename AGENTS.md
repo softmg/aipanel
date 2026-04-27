@@ -44,9 +44,12 @@ For small documentation-only edits, `pnpm typecheck` is usually enough unless su
 - Notification sources currently come from Claude Code JSONL-derived `question`, `permission`, `task`, and `alert` notifications.
 - `AppShell` owns browser notification permission and client-side delivery.
 - `/api/realtime` streams notification events for the active project.
-- Local always-on Telegram delivery is handled by `pnpm notify` daemon (`scripts/aipanel-notifier.ts`) and must reuse `dispatchTelegramTaskCompletionNotifications`.
-- Daemon sends only task-completion Telegram alerts; it must not send permission/question/alert events.
+- Local always-on external delivery is handled by `pnpm notify` daemon (`scripts/aipanel-notifier.ts`).
+- Daemon sends only human-intervention events (Claude question + task ready for review) for Telegram/macOS channels.
+- Daemon must not send permission/tool/Bash/context-threshold alert events to Telegram/macOS channels.
 - Keep Telegram bot tokens server-side only.
+- Unit tests for macOS channel must use runner injection/mocks and must not invoke real `osascript`.
+- If macOS channel is disabled or platform is non-darwin, dispatcher should skip safely.
 - Do not store secrets in `localStorage`, client React state, `NEXT_PUBLIC_*` env vars, or repository-tracked files.
 
 ## Coding expectations

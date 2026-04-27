@@ -13,7 +13,7 @@ const BOT_PATH_PATTERN = /\/bot[A-Za-z0-9:_-]+\//g;
 const CHAT_ID_PATTERN = /\bchat[_-]?id\s*[:=]\s*[^\s,]+/gi;
 const ABSOLUTE_PATH_PATTERN = /(?:\/[\w.-]+)+/g;
 
-export type DeliveryChannel = "telegram";
+export type DeliveryChannel = "telegram" | "macos";
 
 export type DeliveryLogOptions = {
   configDir?: string;

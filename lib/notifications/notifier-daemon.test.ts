@@ -33,9 +33,11 @@ type MutableHarness = {
   projects: ProjectInput[];
   notificationsByProject: Map<string, ClaudeNotification[]>;
   failingProjects: Set<string>;
-  dispatchError: Error | null;
+  telegramDispatchError: Error | null;
+  macosDispatchError: Error | null;
   dispatchSummary: DispatchSummary | null;
-  dispatchSpy: (items: ClaudeNotification[]) => void;
+  telegramDispatchSpy: (items: ClaudeNotification[]) => void;
+  macosDispatchSpy: (items: ClaudeNotification[]) => void;
 };
 
 function createNotification(overrides: Partial<ClaudeNotification> = {}): ClaudeNotification {
@@ -83,9 +85,11 @@ function createHarness(initial: {
     projects: [...initial.projects],
     notificationsByProject: new Map(initial.notificationsByProject ?? []),
     failingProjects: new Set<string>(),
-    dispatchError: null,
+    telegramDispatchError: null,
+    macosDispatchError: null,
     dispatchSummary: initial.dispatchSummary ?? null,
-    dispatchSpy: () => undefined,
+    telegramDispatchSpy: () => undefined,
+    macosDispatchSpy: () => undefined,
   };
 
   const deps: NotifierDependencies = {
@@ -103,15 +107,29 @@ function createHarness(initial: {
       return mutable.notificationsByProject.get(slug) ?? [];
     }),
     dispatchTelegram: vi.fn(async (items: ClaudeNotification[]) => {
-      mutable.dispatchSpy(items);
-      if (mutable.dispatchError) {
-        throw mutable.dispatchError;
+      mutable.telegramDispatchSpy(items);
+      if (mutable.telegramDispatchError) {
+        throw mutable.telegramDispatchError;
       }
 
       return mutable.dispatchSummary ?? {
         considered: items.length,
         eligible: items.length,
         sent: items.length,
+        skipped: 0,
+        failed: 0,
+      };
+    }),
+    dispatchMacos: vi.fn(async (items: ClaudeNotification[]) => {
+      mutable.macosDispatchSpy(items);
+      if (mutable.macosDispatchError) {
+        throw mutable.macosDispatchError;
+      }
+
+      return mutable.dispatchSummary ?? {
+        considered: 0,
+        eligible: 0,
+        sent: 0,
         skipped: 0,
         failed: 0,
       };
@@ -154,6 +172,7 @@ describe("scanNotifierProjects", () => {
     expect(summary.newSinceCursor).toBe(0);
     expect(summary.sent).toBe(0);
     expect(deps.dispatchTelegram).not.toHaveBeenCalled();
+    expect(deps.dispatchMacos).not.toHaveBeenCalled();
   });
 
   it("second scan sends new task-ready-for-review notification", async () => {
@@ -177,6 +196,7 @@ describe("scanNotifierProjects", () => {
     expect(summary.newSinceCursor).toBe(1);
     expect(summary.sent).toBe(1);
     expect(deps.dispatchTelegram).toHaveBeenCalledTimes(1);
+    expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
     const items = (deps.dispatchTelegram as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as ClaudeNotification[];
     expect(items.map((item) => item.id)).toEqual(["new"]);
   });
@@ -197,6 +217,7 @@ describe("scanNotifierProjects", () => {
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
         return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
+      deps.dispatchMacos = vi.fn(async () => ({ considered: 0, eligible: 0, sent: 0, skipped: 0, failed: 0 }));
 
       await scanNotifierProjects(state, { configDir }, deps);
 
@@ -219,6 +240,8 @@ describe("scanNotifierProjects", () => {
       expect(summary.eligible).toBe(1);
       expect(summary.sent).toBe(1);
       expect(sender).toHaveBeenCalledTimes(1);
+      expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
+      expect(deps.dispatchMacos).toHaveBeenCalledWith(expect.any(Array), { configDir, dryRun: false });
     });
   });
 
@@ -238,6 +261,7 @@ describe("scanNotifierProjects", () => {
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
         return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
+      deps.dispatchMacos = vi.fn(async () => ({ considered: 0, eligible: 0, sent: 0, skipped: 0, failed: 0 }));
 
       await scanNotifierProjects(state, { configDir }, deps);
 
@@ -259,6 +283,7 @@ describe("scanNotifierProjects", () => {
       expect(summary.sent).toBe(0);
       expect(summary.skipped).toBe(1);
       expect(sender).not.toHaveBeenCalled();
+      expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -278,6 +303,7 @@ describe("scanNotifierProjects", () => {
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
         return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
+      deps.dispatchMacos = vi.fn(async () => ({ considered: 0, eligible: 0, sent: 0, skipped: 0, failed: 0 }));
 
       await scanNotifierProjects(state, { configDir }, deps);
 
@@ -293,6 +319,7 @@ describe("scanNotifierProjects", () => {
       expect(summary.sent).toBe(1);
       expect(summary.skipped).toBe(0);
       expect(sender).toHaveBeenCalledTimes(1);
+      expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -312,6 +339,7 @@ describe("scanNotifierProjects", () => {
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
         return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
+      deps.dispatchMacos = vi.fn(async () => ({ considered: 0, eligible: 0, sent: 0, skipped: 0, failed: 0 }));
 
       await scanNotifierProjects(state, { configDir }, deps);
 
@@ -327,6 +355,7 @@ describe("scanNotifierProjects", () => {
       expect(summary.sent).toBe(0);
       expect(summary.skipped).toBe(1);
       expect(sender).not.toHaveBeenCalled();
+      expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -351,6 +380,7 @@ describe("scanNotifierProjects", () => {
     expect(summary.newSinceCursor).toBe(0);
     expect(summary.sent).toBe(0);
     expect(deps.dispatchTelegram).not.toHaveBeenCalled();
+    expect(deps.dispatchMacos).not.toHaveBeenCalled();
   });
 
   it("same createdAt with lower/equal id is not sent", async () => {
@@ -397,6 +427,7 @@ describe("scanNotifierProjects", () => {
     expect(summary.sent).toBe(1);
     const items = (deps.dispatchTelegram as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as ClaudeNotification[];
     expect(items.map((item) => item.id)).toEqual(["b"]);
+    expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
   });
 
   it("already delivered notification is not resent because delivery log handles it", async () => {
@@ -415,6 +446,7 @@ describe("scanNotifierProjects", () => {
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
         return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
+      deps.dispatchMacos = vi.fn(async () => ({ considered: 0, eligible: 0, sent: 0, skipped: 0, failed: 0 }));
 
       await scanNotifierProjects(state, { configDir }, deps);
 
@@ -434,6 +466,7 @@ describe("scanNotifierProjects", () => {
       expect(second.sent).toBe(0);
       expect(second.skipped).toBe(1);
       expect(sender).toHaveBeenCalledTimes(1);
+      expect(deps.dispatchMacos).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -458,6 +491,7 @@ describe("scanNotifierProjects", () => {
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
         return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
+      deps.dispatchMacos = vi.fn(async () => ({ considered: 0, eligible: 0, sent: 0, skipped: 0, failed: 0 }));
 
       await scanNotifierProjects(state, { configDir }, deps);
 
@@ -471,6 +505,7 @@ describe("scanNotifierProjects", () => {
       expect(summary.sent).toBe(0);
       expect(summary.skipped).toBe(1);
       expect(sender).not.toHaveBeenCalled();
+      expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -495,6 +530,7 @@ describe("scanNotifierProjects", () => {
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
         return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
+      deps.dispatchMacos = vi.fn(async () => ({ considered: 0, eligible: 0, sent: 0, skipped: 0, failed: 0 }));
 
       await scanNotifierProjects(state, { configDir }, deps);
 
@@ -508,6 +544,7 @@ describe("scanNotifierProjects", () => {
       expect(summary.sent).toBe(0);
       expect(summary.skipped).toBe(1);
       expect(sender).not.toHaveBeenCalled();
+      expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -531,6 +568,7 @@ describe("scanNotifierProjects", () => {
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
         return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
+      deps.dispatchMacos = vi.fn(async () => ({ considered: 0, eligible: 0, sent: 0, skipped: 0, failed: 0 }));
 
       await scanNotifierProjects(state, { configDir }, deps);
 
@@ -544,6 +582,7 @@ describe("scanNotifierProjects", () => {
       expect(summary.sent).toBe(0);
       expect(summary.skipped).toBe(1);
       expect(sender).not.toHaveBeenCalled();
+      expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -577,6 +616,8 @@ describe("scanNotifierProjects", () => {
       dispatchSummary: { considered: 2, eligible: 1, sent: 1, skipped: 1, failed: 0 },
     });
 
+    deps.dispatchMacos = vi.fn(async () => ({ considered: 0, eligible: 0, sent: 0, skipped: 0, failed: 0 }));
+
     await scanNotifierProjects(state, {}, deps);
 
     mutable.notificationsByProject.set("aipanel", [
@@ -599,9 +640,11 @@ describe("scanNotifierProjects", () => {
       skipped: 1,
       failed: 0,
     });
+    expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
+    expect(deps.dispatchMacos).toHaveBeenCalledWith(expect.any(Array), { configDir: undefined, dryRun: false });
   });
 
-  it("errors are sanitized and do not include bot token", async () => {
+  it("Telegram dispatch failure does not block macOS dispatch", async () => {
     const state = createNotifierDaemonState();
     const { deps, mutable } = createHarness({
       projects: [{ slug: "aipanel", name: "aipanel" }],
@@ -614,17 +657,85 @@ describe("scanNotifierProjects", () => {
 
     mutable.notificationsByProject.set("aipanel", [
       createNotification({ id: "base", createdAt: "2026-04-27T08:00:00.000Z" }),
-      createNotification({ id: "new", createdAt: "2026-04-27T08:00:01.000Z" }),
+      createNotification({ id: "question", kind: "question", status: undefined, createdAt: "2026-04-27T08:00:01.000Z" }),
     ]);
-    mutable.dispatchError = new Error("Telegram failed 123456:ABCtoken /bot123456:ABCtoken/sendMessage");
+
+    deps.dispatchTelegram = vi.fn(async () => {
+      throw new Error("telegram down");
+    });
+    deps.dispatchMacos = vi.fn(async (items: ClaudeNotification[]) => ({
+      considered: items.length,
+      eligible: items.length,
+      sent: items.length,
+      skipped: 0,
+      failed: 0,
+    }));
 
     const summary = await scanNotifierProjects(state, {}, deps);
-    const error = summary.projectSummaries[0]?.error ?? "";
 
-    expect(error).toContain("[redacted-token]");
-    expect(error).toContain("[path]");
-    expect(error).not.toContain("123456:ABCtoken");
-    expect(error).not.toContain("/bot123456:ABCtoken/");
+    expect(deps.dispatchTelegram).toHaveBeenCalledTimes(1);
+    expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
+    expect(summary.sent).toBe(1);
+    expect(summary.skipped).toBe(1);
+    expect(summary.failed).toBe(0);
+    expect(summary.projectSummaries[0]?.error).toBeUndefined();
+  });
+
+  it("macOS dispatch failure does not block Telegram dispatch", async () => {
+    const state = createNotifierDaemonState();
+    const { deps, mutable } = createHarness({
+      projects: [{ slug: "aipanel", name: "aipanel" }],
+      notificationsByProject: new Map([
+        ["aipanel", [createNotification({ id: "base", createdAt: "2026-04-27T08:00:00.000Z" })]],
+      ]),
+    });
+
+    await scanNotifierProjects(state, {}, deps);
+
+    mutable.notificationsByProject.set("aipanel", [
+      createNotification({ id: "base", createdAt: "2026-04-27T08:00:00.000Z" }),
+      createNotification({ id: "question", kind: "question", status: undefined, createdAt: "2026-04-27T08:00:01.000Z" }),
+    ]);
+
+    deps.dispatchTelegram = vi.fn(async (items: ClaudeNotification[]) => ({
+      considered: items.length,
+      eligible: items.length,
+      sent: items.length,
+      skipped: 0,
+      failed: 0,
+    }));
+    deps.dispatchMacos = vi.fn(async () => {
+      throw new Error("macos down");
+    });
+
+    const summary = await scanNotifierProjects(state, {}, deps);
+
+    expect(deps.dispatchTelegram).toHaveBeenCalledTimes(1);
+    expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
+    expect(summary.sent).toBe(1);
+    expect(summary.skipped).toBe(1);
+    expect(summary.failed).toBe(0);
+    expect(summary.projectSummaries[0]?.error).toBeUndefined();
+  });
+
+  it("daemon keeps running if one project fetch fails", async () => {
+    const state = createNotifierDaemonState();
+    const { deps, mutable } = createHarness({
+      projects: [
+        { slug: "aipanel", name: "aipanel" },
+        { slug: "other", name: "other" },
+      ],
+      notificationsByProject: new Map([
+        ["other", [createNotification({ id: "other-base", projectSlug: "other", projectLabel: "other" })]],
+      ]),
+    });
+
+    mutable.failingProjects.add("aipanel");
+    const summary = await scanNotifierProjects(state, {}, deps);
+
+    expect(summary.projectsFailed).toBe(1);
+    expect(summary.projectsSucceeded).toBe(1);
+    expect(summary.projectSummaries.find((item) => item.projectSlug === "aipanel")?.error).toContain("boom aipanel");
   });
 });
 
@@ -681,6 +792,7 @@ describe("runNotifierDaemon", () => {
     expect(summary.sent).toBe(0);
     expect(summary.skipped).toBe(3);
     expect(deps.dispatchTelegram).not.toHaveBeenCalled();
+    expect(deps.dispatchMacos).not.toHaveBeenCalled();
   });
 
   it("formatNotifierStartupSummary outputs safe status flags", () => {

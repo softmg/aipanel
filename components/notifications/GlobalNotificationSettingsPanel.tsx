@@ -18,7 +18,7 @@ const KIND_OPTIONS: Array<{ kind: NotificationKind; label: string }> = [
 const CHANNEL_OPTIONS: Array<{ channel: Exclude<NotificationChannel, "telegram">; label: string; disabled?: boolean }> = [
   { channel: "inApp", label: "In-app" },
   { channel: "browser", label: "Browser desktop alert" },
-  { channel: "macos", label: "macOS app coming later", disabled: true },
+  { channel: "macos", label: "macOS native notification" },
 ];
 
 type LoadState = "loading" | "ready" | "error";
@@ -409,6 +409,9 @@ export function GlobalNotificationSettingsPanel() {
             {!telegramStatus.configured ? (
               <p className="text-xs text-zinc-500">Configure Telegram first.</p>
             ) : null}
+            <p className="text-xs text-zinc-500">
+              macOS native notification sends local macOS notifications for questions and tasks ready for review while pnpm notify is running. Works only on macOS and daemon mode.
+            </p>
           </fieldset>
 
           <div className="rounded border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950/40">

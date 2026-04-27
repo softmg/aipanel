@@ -41,8 +41,11 @@ test("@smoke global notification settings copy is correct", async ({ page }) => 
   await expect(dialog.getByLabel("Enable notifications")).toBeVisible();
   await expect(dialog.getByLabel("Context tokens exceed")).toBeVisible();
   await expect(dialog.getByLabel("Browser desktop alert")).toBeVisible();
+  await expect(dialog.getByLabel("macOS native notification")).toBeVisible();
   await expect(dialog.getByLabel("Telegram review/questions")).toBeVisible();
+  await expect(dialog.getByText("macOS native notification sends local macOS notifications for questions and tasks ready for review while pnpm notify is running. Works only on macOS and daemon mode.")).toBeVisible();
   await expect(dialog.getByText("Telegram sends only when Claude asks a question or a task is ready for review. Permission/tool requests stay in the in-app drawer.")).toBeVisible();
+  await expect(dialog.getByText("packaged app", { exact: false })).toHaveCount(0);
   await expect(dialog.getByText("Claude asks a question")).toBeVisible();
   await expect(dialog.getByText("task is ready for review")).toBeVisible();
   await expect(dialog.getByText("Telegram sends aipanel alerts through your own Telegram bot.")).toHaveCount(0);

@@ -158,9 +158,9 @@ NEXT_PUBLIC_AIPANEL_BROWSER_NOTIFICATIONS_ENABLED=false
 - включён dedupe и rate-limit, чтобы не спамить повторяющимися событиями.
 - For always-on delivery, use Telegram daemon (see below).
 
-## Telegram notifier daemon (always-on)
+## Telegram + macOS notifier daemon (always-on)
 
-Для always-on Telegram-доставки без открытой вкладки aipanel запустите локальный daemon:
+Для always-on доставки без открытой вкладки aipanel запустите локальный daemon:
 
 ```bash
 pnpm notify
@@ -172,21 +172,31 @@ pnpm notify
 pnpm notify:once
 ```
 
-Daemon отправляет в Telegram **только task-completion** уведомления.
-Не отправляются permission/tool/Bash, question и context-threshold alert уведомления.
+Daemon отправляет внешние уведомления только для human-intervention событий:
+- Claude asks a question
+- Task ready for review
+
+Не отправляются permission/tool/Bash и context-threshold alert уведомления.
+
+macOS native notification (optional):
+- включается в глобальных Notification settings (`macOS native notification`);
+- работает только на macOS;
+- текущая реализация daemon-based (`osascript`), не packaged app и не service-worker push;
+- на non-macOS канал safely skip без падения.
 
 Поведение:
-- daemon использует тот же dispatcher, что и `/api/realtime`;
-- dedupe между realtime и daemon обеспечивается общим delivery log;
-- первый scan устанавливает baseline и не отправляет исторические завершения;
-- завершения, случившиеся пока daemon был офлайн, по умолчанию не отправляются;
-- catch-up режим может быть добавлен позже.
+- daemon использует общий human-intervention dispatcher path;
+- dedupe обеспечивается общим delivery log, отдельно по channel (`telegram` и `macos`);
+- первый scan устанавливает baseline и не отправляет исторические события;
+- уведомления во время офлайна daemon по умолчанию не досылаются.
 
 Секреты Telegram хранятся в:
 - `~/.aipanel/notification-secrets.json`
 
 Delivery log хранится в:
 - `~/.aipanel/notification-delivery-log.sqlite`
+
+Future: packaged app/Tauri shell сможет добавить richer permissions, click/deeplink behavior.
 
 Если `concurrently` не установлен, запускайте в двух терминалах:
 1. `pnpm dev`

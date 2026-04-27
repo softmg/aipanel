@@ -13,7 +13,7 @@ import {
 } from "@/lib/notifications/delivery-log";
 
 type DeliveryInput = {
-  channel: "telegram";
+  channel: "telegram" | "macos";
   notificationId: string;
   projectSlug?: string;
   sessionId?: string;
@@ -91,6 +91,7 @@ describe("notification delivery log", () => {
     const base = makeDeliveryKey(baseInput());
     expect(makeDeliveryKey(baseInput({ notificationId: "notification-2" }))).not.toBe(base);
     expect(makeDeliveryKey(baseInput({ sessionId: "session-2" }))).not.toBe(base);
+    expect(makeDeliveryKey(baseInput({ channel: "macos" }))).not.toBe(base);
     expect(makeDeliveryKey(baseInput({ ruleId: "other-rule" }))).not.toBe(base);
   });
 
