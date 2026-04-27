@@ -254,6 +254,41 @@ describe("aggregator", () => {
     );
   });
 
+  it("adds project metadata to derived ready-for-review notifications", async () => {
+    vi.spyOn(claudeCodeSource, "listNotificationsForProject").mockResolvedValue([
+      {
+        id: "s-1-ready-for-review-1777271796753-f8b88b",
+        sessionId: "s-1",
+        sessionLabel: "session · s-1",
+        createdAt: "2026-04-27T08:00:00.000Z",
+        kind: "task",
+        title: "Task ready for review",
+        details: "Assistant finished responding: pong",
+        status: "completed",
+        source: "derived",
+      },
+    ]);
+
+    await withTempConfig(
+      JSON.stringify({
+        projects: [{ name: "Demo", path: "/tmp/demo" }],
+      }),
+      async () => {
+        const notifications = await getProjectNotifications("demo");
+        expect(notifications).toHaveLength(1);
+        expect(notifications[0]).toMatchObject({
+          id: "s-1-ready-for-review-1777271796753-f8b88b",
+          sessionId: "s-1",
+          kind: "task",
+          source: "derived",
+          status: "completed",
+          projectSlug: "demo",
+          projectLabel: "Demo",
+        });
+      },
+    );
+  });
+
   it("adds project metadata to derived context threshold notifications", async () => {
     vi.spyOn(claudeCodeSource, "listSessionsForProject").mockResolvedValue([
       createSession({

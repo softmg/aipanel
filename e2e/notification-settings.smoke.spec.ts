@@ -7,11 +7,22 @@ async function openNotifications(page: import("@playwright/test").Page) {
 
   const openButton = page.getByRole("button", { name: "Open notifications" });
   await expect(openButton).toBeVisible();
+
+  const settingsResponse = page.waitForResponse((response) => (
+    response.url().includes("/api/notification-settings") && response.ok()
+  ));
+  const telegramStatusResponse = page.waitForResponse((response) => (
+    response.url().includes("/api/notifications/telegram") && response.ok()
+  ));
+
   await openButton.click();
+  await settingsResponse;
+  await telegramStatusResponse;
 
   const dialog = page.getByRole("dialog", { name: "Notifications" });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("heading", { name: "Notification settings" })).toBeVisible();
+  await expect(dialog.getByLabel("Enable notifications")).toBeVisible();
 
   return dialog;
 }
@@ -30,8 +41,10 @@ test("@smoke global notification settings copy is correct", async ({ page }) => 
   await expect(dialog.getByLabel("Enable notifications")).toBeVisible();
   await expect(dialog.getByLabel("Context tokens exceed")).toBeVisible();
   await expect(dialog.getByLabel("Browser desktop alert")).toBeVisible();
-  await expect(dialog.getByLabel("Telegram task completion")).toBeVisible();
-  await expect(dialog.getByText("Telegram sends only task-completion alerts. Permission/tool requests stay in the in-app drawer.")).toBeVisible();
+  await expect(dialog.getByLabel("Telegram review/questions")).toBeVisible();
+  await expect(dialog.getByText("Telegram sends only when Claude asks a question or a task is ready for review. Permission/tool requests stay in the in-app drawer.")).toBeVisible();
+  await expect(dialog.getByText("Claude asks a question")).toBeVisible();
+  await expect(dialog.getByText("task is ready for review")).toBeVisible();
   await expect(dialog.getByText("Telegram sends aipanel alerts through your own Telegram bot.")).toHaveCount(0);
 
   await expect(dialog.getByText("Push", { exact: true })).toHaveCount(0);

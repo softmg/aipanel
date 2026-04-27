@@ -6,7 +6,8 @@ import {
   parseRealtimeSinceParam,
   type NotificationCursor,
 } from "@/lib/notifications/notification-cursor";
-import { dispatchTelegramTaskCompletionNotifications } from "@/lib/notifications/telegram-task-dispatcher";
+import { isHumanInterventionNotification } from "@/lib/notifications/human-intervention";
+import { dispatchTelegramHumanInterventionNotifications } from "@/lib/notifications/telegram-human-intervention-dispatcher";
 import { getProjectCards, getProjectDetail, getProjectNotifications } from "@/lib/services/aggregator";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 
@@ -139,8 +140,9 @@ export async function GET(request: Request) {
 
             emitNotifications(newNotifications.map(toRealtimeNotificationPayload), write);
 
-            if (newNotifications.length > 0) {
-              void dispatchTelegramTaskCompletionNotifications(newNotifications).catch(() => undefined);
+            const humanInterventionNotifications = newNotifications.filter(isHumanInterventionNotification);
+            if (humanInterventionNotifications.length > 0) {
+              void dispatchTelegramHumanInterventionNotifications(humanInterventionNotifications).catch(() => undefined);
             }
 
             notificationCursor = advanceNotificationCursor(notificationCursor, notifications);

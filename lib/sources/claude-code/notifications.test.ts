@@ -98,6 +98,184 @@ describe("claude-code notifications", () => {
     }
   });
 
+  it("derives a ready-for-review notification from a completed ping-pong assistant turn", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-notifications-"));
+    const filePath = path.join(tempRoot, "ping-session.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: "user",
+          uuid: "user-1",
+          timestamp: "2026-04-27T06:36:33.192Z",
+          sessionId: "ping-session",
+          message: { role: "user", content: "ping" },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          uuid: "assistant-1",
+          timestamp: "2026-04-27T06:36:40.001Z",
+          sessionId: "ping-session",
+          message: {
+            id: "1777271796753",
+            role: "assistant",
+            content: [{ type: "text", text: "pong" }],
+            stop_reason: "end_turn",
+          },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const first = await parseSessionNotifications(filePath);
+      clearClaudeCodeNotificationCache();
+      const second = await parseSessionNotifications(filePath);
+
+      expect(first).toHaveLength(1);
+      expect(first[0]).toMatchObject({
+        sessionId: "ping-session",
+        kind: "task",
+        source: "derived",
+        status: "completed",
+        title: "Task ready for review",
+        details: "Assistant finished responding: pong",
+        createdAt: "2026-04-27T06:36:40.001Z",
+      });
+      expect(first[0]?.id).toBe(second[0]?.id);
+      expect(new Set(second.map((item) => item.id)).size).toBe(second.length);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does not derive ready-for-review from permission tool-use turns", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-notifications-"));
+    const filePath = path.join(tempRoot, "permission-session.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: "user",
+          uuid: "user-1",
+          timestamp: "2026-04-27T08:00:00.000Z",
+          sessionId: "permission-session",
+          message: { role: "user", content: "run status" },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          uuid: "assistant-1",
+          timestamp: "2026-04-27T08:00:01.000Z",
+          sessionId: "permission-session",
+          message: {
+            id: "assistant-message-1",
+            role: "assistant",
+            content: [{ type: "tool_use", name: "Bash", input: { description: "Run git status" } }],
+            stop_reason: "tool_use",
+          },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const notifications = await parseSessionNotifications(filePath);
+
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0]).toMatchObject({ kind: "permission", title: "Run git status" });
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does not derive ready-for-review while assistant turn is still running", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-notifications-"));
+    const filePath = path.join(tempRoot, "running-session.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: "user",
+          uuid: "user-1",
+          timestamp: "2026-04-27T08:00:00.000Z",
+          sessionId: "running-session",
+          message: { role: "user", content: "ping" },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          uuid: "assistant-1",
+          timestamp: "2026-04-27T08:00:01.000Z",
+          sessionId: "running-session",
+          message: {
+            id: "assistant-message-1",
+            role: "assistant",
+            content: [{ type: "text", text: "pong" }],
+            stop_reason: null,
+          },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      await expect(parseSessionNotifications(filePath)).resolves.toEqual([]);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does not add derived ready-for-review when a structured task completion already exists", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-notifications-"));
+    const filePath = path.join(tempRoot, "structured-session.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: "user",
+          uuid: "user-1",
+          timestamp: "2026-04-27T08:00:00.000Z",
+          sessionId: "structured-session",
+          message: { role: "user", content: "build" },
+        }),
+        JSON.stringify({
+          type: "assistant",
+          uuid: "assistant-1",
+          timestamp: "2026-04-27T08:00:01.000Z",
+          sessionId: "structured-session",
+          message: {
+            id: "assistant-message-1",
+            role: "assistant",
+            content: [{ type: "text", text: "Build complete." }],
+            stop_reason: "end_turn",
+          },
+        }),
+        JSON.stringify({
+          type: "queue-operation",
+          uuid: "task-1",
+          timestamp: "2026-04-27T08:00:02.000Z",
+          sessionId: "structured-session",
+          operation: "enqueue",
+          content:
+            "<task-notification><task-id>abc</task-id><status>completed</status><summary>Build finished</summary></task-notification>",
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const notifications = await parseSessionNotifications(filePath);
+
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0]).toMatchObject({ kind: "task", source: "log", status: "completed" });
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("builds a context threshold alert when context reaches threshold", () => {
     const notification = buildContextThresholdNotification({
       sessionId: "session-main",

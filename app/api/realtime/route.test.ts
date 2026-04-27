@@ -15,8 +15,8 @@ vi.mock("@/lib/services/aggregator", () => ({
   getProjectNotifications: vi.fn(),
 }));
 
-vi.mock("@/lib/notifications/telegram-task-dispatcher", () => ({
-  dispatchTelegramTaskCompletionNotifications: vi.fn().mockResolvedValue({
+vi.mock("@/lib/notifications/telegram-human-intervention-dispatcher", () => ({
+  dispatchTelegramHumanInterventionNotifications: vi.fn().mockResolvedValue({
     considered: 0,
     eligible: 0,
     sent: 0,
@@ -26,7 +26,7 @@ vi.mock("@/lib/notifications/telegram-task-dispatcher", () => ({
 }));
 
 const aggregator = vi.mocked(await import("@/lib/services/aggregator"));
-const telegramDispatcher = vi.mocked(await import("@/lib/notifications/telegram-task-dispatcher"));
+const telegramDispatcher = vi.mocked(await import("@/lib/notifications/telegram-human-intervention-dispatcher"));
 
 type SseEvent = {
   event: string;
@@ -110,7 +110,7 @@ async function readEvents(stream: Awaited<ReturnType<typeof openRealtime>>): Pro
 describe("GET /api/realtime", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    telegramDispatcher.dispatchTelegramTaskCompletionNotifications.mockResolvedValue({
+    telegramDispatcher.dispatchTelegramHumanInterventionNotifications.mockResolvedValue({
       considered: 0,
       eligible: 0,
       sent: 0,
@@ -146,7 +146,7 @@ describe("GET /api/realtime", () => {
     try {
       const events = await readEvents(stream);
       expect(events.map((event) => event.event)).toEqual(["ready"]);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
     }
@@ -159,7 +159,7 @@ describe("GET /api/realtime", () => {
     try {
       const events = await readEvents(stream);
       expect(events.map((event) => event.event)).toEqual(["ready"]);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
     }
@@ -194,10 +194,7 @@ describe("GET /api/realtime", () => {
           },
         ],
       });
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledTimes(1);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledWith([
-        expect.objectContaining({ id: "new" }),
-      ]);
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
     }
@@ -217,7 +214,7 @@ describe("GET /api/realtime", () => {
     try {
       const events = await readEvents(stream);
       expect(events.map((event) => event.event)).toEqual(["ready"]);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
     }
@@ -242,10 +239,7 @@ describe("GET /api/realtime", () => {
       expect(notificationEvents.map((event) => event.event)).toEqual(["notification"]);
       expect(updateEvents.map((event) => event.event)).toEqual(["update"]);
       expect(notificationEvents[0]?.data).toMatchObject({ items: [{ id: "new" }] });
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledTimes(1);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledWith([
-        expect.objectContaining({ id: "new" }),
-      ]);
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
       vi.useRealTimers();
@@ -268,14 +262,14 @@ describe("GET /api/realtime", () => {
       await vi.advanceTimersByTimeAsync(3000);
       const events = await readEvents(stream);
       expect(events.map((event) => event.event)).toEqual(["update"]);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
       vi.useRealTimers();
     }
   });
 
-  it("invokes Telegram dispatcher for new task-completion notifications", async () => {
+  it("invokes Telegram dispatcher for new task-ready-for-review notifications", async () => {
     const taskNotification = createNotification("task-complete", "2026-04-25T10:00:01.000Z");
     taskNotification.kind = "task";
     taskNotification.status = "completed";
@@ -287,10 +281,50 @@ describe("GET /api/realtime", () => {
     try {
       expect((await readEvents(stream)).map((event) => event.event)).toEqual(["notification"]);
       expect((await readEvents(stream)).map((event) => event.event)).toEqual(["ready"]);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledTimes(1);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledWith([
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).toHaveBeenCalledTimes(1);
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).toHaveBeenCalledWith([
         expect.objectContaining({ id: "task-complete", kind: "task", status: "completed" }),
       ]);
+    } finally {
+      await stream.close();
+    }
+  });
+
+  it("invokes Telegram dispatcher for new question notifications", async () => {
+    const questionNotification = createNotification("question", "2026-04-25T10:00:01.000Z");
+    questionNotification.kind = "question";
+    questionNotification.title = "Which option should we use?";
+    questionNotification.status = undefined;
+
+    setupRealtimeMocks([[questionNotification]]);
+    const stream = await openRealtime("http://localhost/api/realtime?activeSlug=aipanel&since=2026-04-25T10:00:00.000Z");
+
+    try {
+      expect((await readEvents(stream)).map((event) => event.event)).toEqual(["notification"]);
+      expect((await readEvents(stream)).map((event) => event.event)).toEqual(["ready"]);
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).toHaveBeenCalledTimes(1);
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).toHaveBeenCalledWith([
+        expect.objectContaining({ id: "question", kind: "question" }),
+      ]);
+    } finally {
+      await stream.close();
+    }
+  });
+
+  it("does not invoke Telegram dispatcher for new permission or alert notifications", async () => {
+    const permissionNotification = createNotification("permission", "2026-04-25T10:00:01.000Z");
+    permissionNotification.kind = "permission";
+    const alertNotification = createNotification("alert", "2026-04-25T10:00:02.000Z");
+    alertNotification.kind = "alert";
+    alertNotification.status = "warning";
+
+    setupRealtimeMocks([[permissionNotification, alertNotification]]);
+    const stream = await openRealtime("http://localhost/api/realtime?activeSlug=aipanel&since=2026-04-25T10:00:00.000Z");
+
+    try {
+      expect((await readEvents(stream)).map((event) => event.event)).toEqual(["notification"]);
+      expect((await readEvents(stream)).map((event) => event.event)).toEqual(["ready"]);
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
     }
@@ -303,16 +337,19 @@ describe("GET /api/realtime", () => {
     try {
       const events = await readEvents(stream);
       expect(events.map((event) => event.event)).toEqual(["ready"]);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
     }
   });
 
   it("keeps SSE notification events when Telegram dispatcher fails", async () => {
-    telegramDispatcher.dispatchTelegramTaskCompletionNotifications.mockRejectedValueOnce(new Error("dispatch failed"));
+    telegramDispatcher.dispatchTelegramHumanInterventionNotifications.mockRejectedValueOnce(new Error("dispatch failed"));
+    const notification = createNotification("new", "2026-04-25T10:00:01.000Z");
+    notification.kind = "task";
+    notification.status = "completed";
 
-    setupRealtimeMocks([[createNotification("new", "2026-04-25T10:00:01.000Z")]]);
+    setupRealtimeMocks([[notification]]);
     const stream = await openRealtime("http://localhost/api/realtime?activeSlug=aipanel&since=2026-04-25T10:00:00.000Z");
 
     try {
@@ -321,16 +358,19 @@ describe("GET /api/realtime", () => {
       expect(notificationEvents.map((event) => event.event)).toEqual(["notification"]);
       expect(readyEvents.map((event) => event.event)).toEqual(["ready"]);
       expect(notificationEvents[0]?.data).toMatchObject({ items: [{ id: "new" }] });
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledTimes(1);
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).toHaveBeenCalledTimes(1);
     } finally {
       await stream.close();
     }
   });
 
-  it("dispatches only notifications newer than valid since baseline", async () => {
+  it("dispatches only human-intervention notifications newer than valid since baseline", async () => {
+    const newTask = createNotification("new-1", "2026-04-25T10:00:02.000Z");
+    newTask.kind = "task";
+    newTask.status = "completed";
     setupRealtimeMocks([
       [
-        createNotification("new-1", "2026-04-25T10:00:02.000Z"),
+        newTask,
         createNotification("old-1", "2026-04-25T09:59:59.000Z"),
       ],
     ]);
@@ -340,8 +380,8 @@ describe("GET /api/realtime", () => {
     try {
       expect((await readEvents(stream)).map((event) => event.event)).toEqual(["notification"]);
       expect((await readEvents(stream)).map((event) => event.event)).toEqual(["ready"]);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledTimes(1);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).toHaveBeenCalledWith([
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).toHaveBeenCalledTimes(1);
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).toHaveBeenCalledWith([
         expect.objectContaining({ id: "new-1" }),
       ]);
     } finally {
@@ -355,7 +395,7 @@ describe("GET /api/realtime", () => {
 
     try {
       expect((await readEvents(stream)).map((event) => event.event)).toEqual(["ready"]);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
     }
@@ -367,7 +407,7 @@ describe("GET /api/realtime", () => {
 
     try {
       expect((await readEvents(stream)).map((event) => event.event)).toEqual(["ready"]);
-      expect(telegramDispatcher.dispatchTelegramTaskCompletionNotifications).not.toHaveBeenCalled();
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
     } finally {
       await stream.close();
     }

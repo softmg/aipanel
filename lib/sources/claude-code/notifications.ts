@@ -1,9 +1,18 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import { getClaudeProjectDir } from "@/lib/sources/claude-code/paths";
 import type { ClaudeNotification, SessionContextUsage } from "@/lib/sources/claude-code/types";
+
+type RawContentItem = {
+  type?: string;
+  name?: string;
+  text?: string;
+  content?: string | Array<{ type?: string; text?: string }>;
+  input?: Record<string, unknown>;
+};
 
 type RawEvent = {
   type?: string;
@@ -15,18 +24,23 @@ type RawEvent = {
   operation?: string;
   content?: string;
   message?: {
+    id?: string;
     role?: string;
-    content?: Array<{
-      type?: string;
-      name?: string;
-      input?: Record<string, unknown>;
-    }>;
+    stop_reason?: string;
+    content?: string | RawContentItem[];
   };
 };
 
 type CachedNotifications = {
   mtimeMs: number;
   value: ClaudeNotification[];
+};
+
+type ReadyForReviewCandidate = {
+  event: RawEvent;
+  sessionId: string;
+  eventIndex: number;
+  text: string;
 };
 
 export const DEFAULT_CONTEXT_TOKENS_THRESHOLD = 500_000;
@@ -43,8 +57,20 @@ export type ContextThresholdSession = {
 
 const notificationCache = new Map<string, CachedNotifications>();
 const PERMISSION_TOOLS = new Set(["Bash", "Edit", "Write", "NotebookEdit", "RemoteTrigger"]);
+const COMPLETION_STATUSES = new Set(["completed", "complete", "done", "finished", "succeeded", "success"]);
+const COMPLETION_TEXT_PATTERN = /\b(completed?|done|finished|succeeded|success)\b/i;
 const MAX_SESSION_FILES = 12;
 const MAX_NOTIFICATIONS = 50;
+const MAX_READY_FOR_REVIEW_DETAILS_LENGTH = 240;
+const SECRET_PATTERNS: RegExp[] = [
+  /\b\d{5,}:[A-Za-z0-9_-]{5,}\b/g,
+  /\bbot\d{5,}:[A-Za-z0-9_-]{5,}\b/gi,
+  /\bTOKEN\s*=\s*[^\s]+/gi,
+  /\bAPI_KEY\s*=\s*[^\s]+/gi,
+  /\bpassword\s*=\s*[^\s]+/gi,
+  /\bAuthorization\s*:\s*[^\n\r]+/gi,
+  /\bsk-[A-Za-z0-9_-]{10,}/g,
+];
 
 function parseTimestamp(value: string): number {
   const parsed = new Date(value).valueOf();
@@ -78,6 +104,136 @@ function parseTaskNotification(content: string): { status?: string; summary?: st
   const status = content.match(/<status>([^<]+)<\/status>/)?.[1];
   const summary = content.match(/<summary>([^<]+)<\/summary>/)?.[1];
   return { status, summary };
+}
+
+function collapseWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function truncate(value: string, maxLength: number): string {
+  if (value.length <= maxLength) {
+    return value;
+  }
+
+  return `${value.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
+}
+
+function redactNotificationText(value: string): string {
+  return SECRET_PATTERNS.reduce((result, pattern) => result.replace(pattern, "[redacted]"), value);
+}
+
+function extractTextContent(content: NonNullable<RawEvent["message"]>["content"]): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .map((item) => {
+      if (item.type === "text" && typeof item.text === "string") {
+        return item.text;
+      }
+      if (typeof item.content === "string") {
+        return item.content;
+      }
+      if (Array.isArray(item.content)) {
+        return item.content.map((nested) => nested.text ?? "").join(" ");
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join(" ");
+}
+
+function isHumanPromptEvent(event: RawEvent): boolean {
+  if (event.type !== "user") {
+    return false;
+  }
+
+  const content = event.message?.content;
+  if (typeof content === "string") {
+    return Boolean(collapseWhitespace(content));
+  }
+
+  if (!Array.isArray(content)) {
+    return false;
+  }
+
+  return content.some((item) => item.type === "text" && typeof item.text === "string" && Boolean(collapseWhitespace(item.text)));
+}
+
+function extractCompletedAssistantResponseText(event: RawEvent): string | null {
+  if (event.type !== "assistant" || event.message?.role !== "assistant" || event.message.stop_reason !== "end_turn") {
+    return null;
+  }
+
+  const content = event.message.content;
+  if (Array.isArray(content) && content.some((item) => item.type === "tool_use")) {
+    return null;
+  }
+
+  const text = collapseWhitespace(extractTextContent(content));
+  return text ? text : null;
+}
+
+function hashContent(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 12);
+}
+
+function normalizeStatus(value: string | undefined): string | null {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.replace(/[.\s]+$/g, "");
+}
+
+function isStructuredTaskCompletionNotification(notification: ClaudeNotification): boolean {
+  if (notification.kind !== "task" || notification.source !== "log") {
+    return false;
+  }
+
+  const status = normalizeStatus(notification.status);
+  if (status) {
+    return COMPLETION_STATUSES.has(status);
+  }
+
+  return COMPLETION_TEXT_PATTERN.test([notification.title, notification.details].filter(Boolean).join("\n"));
+}
+
+function hasStructuredTaskCompletionAtOrAfter(
+  notifications: ClaudeNotification[],
+  candidate: ReadyForReviewCandidate,
+): boolean {
+  const candidateCreatedAt = asIso(candidate.event.timestamp) ?? new Date(0).toISOString();
+  const candidateTimestamp = parseTimestamp(candidateCreatedAt);
+
+  return notifications.some((notification) => (
+    isStructuredTaskCompletionNotification(notification) && parseTimestamp(notification.createdAt) >= candidateTimestamp
+  ));
+}
+
+function buildReadyForReviewNotification(candidate: ReadyForReviewCandidate): ClaudeNotification {
+  const createdAt = asIso(candidate.event.timestamp) ?? new Date(0).toISOString();
+  const sessionLabel = buildSessionLabel(candidate.event, candidate.sessionId);
+  const stableMessageId = candidate.event.message?.id ?? candidate.event.uuid ?? `${candidate.sessionId}-${candidate.eventIndex}`;
+  const safeSummary = truncate(redactNotificationText(candidate.text), MAX_READY_FOR_REVIEW_DETAILS_LENGTH);
+
+  return {
+    id: `${candidate.sessionId}-ready-for-review-${stableMessageId}-${hashContent(candidate.text)}`,
+    sessionId: candidate.sessionId,
+    sessionLabel,
+    createdAt,
+    kind: "task",
+    title: "Task ready for review",
+    details: safeSummary ? `Assistant finished responding: ${safeSummary}` : "Assistant finished responding. Review the result.",
+    status: "completed",
+    source: "derived",
+  };
 }
 
 function extractNotificationsFromEvent(event: RawEvent, sessionId: string, eventIndex: number): ClaudeNotification[] {
@@ -243,6 +399,8 @@ export async function parseSessionNotifications(filePath: string): Promise<Claud
   const notifications: ClaudeNotification[] = [];
 
   let eventIndex = 0;
+  let hasUserPromptAwaitingAssistantCompletion = false;
+  let readyForReviewCandidate: ReadyForReviewCandidate | null = null;
 
   for await (const line of rl) {
     if (!line.trim()) {
@@ -256,8 +414,28 @@ export async function parseSessionNotifications(filePath: string): Promise<Claud
       continue;
     }
 
+    if (isHumanPromptEvent(event)) {
+      hasUserPromptAwaitingAssistantCompletion = true;
+      readyForReviewCandidate = null;
+    }
+
+    const completedAssistantText = extractCompletedAssistantResponseText(event);
+    if (completedAssistantText && hasUserPromptAwaitingAssistantCompletion) {
+      readyForReviewCandidate = {
+        event,
+        sessionId,
+        eventIndex,
+        text: completedAssistantText,
+      };
+      hasUserPromptAwaitingAssistantCompletion = false;
+    }
+
     notifications.push(...extractNotificationsFromEvent(event, sessionId, eventIndex));
     eventIndex += 1;
+  }
+
+  if (readyForReviewCandidate && !hasStructuredTaskCompletionAtOrAfter(notifications, readyForReviewCandidate)) {
+    notifications.push(buildReadyForReviewNotification(readyForReviewCandidate));
   }
 
   const sorted = notifications.sort((left, right) => {

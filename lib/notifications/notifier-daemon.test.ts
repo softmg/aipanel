@@ -11,7 +11,7 @@ import {
   type NotifierDependencies,
   type NotifierLogger,
 } from "@/lib/notifications/notifier-daemon";
-import { dispatchTelegramTaskCompletionNotifications } from "@/lib/notifications/telegram-task-dispatcher";
+import { dispatchTelegramHumanInterventionNotifications } from "@/lib/notifications/telegram-human-intervention-dispatcher";
 import { saveNotificationSecrets } from "@/lib/notifications/secrets";
 import { getDefaultNotificationSettings, saveNotificationSettings } from "@/lib/notifications/settings";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
@@ -134,7 +134,18 @@ describe("scanNotifierProjects", () => {
     const state = createNotifierDaemonState();
     const { deps } = createHarness({
       projects: [{ slug: "aipanel", name: "aipanel" }],
-      notificationsByProject: new Map([["aipanel", [createNotification({ id: "old" })]]]),
+      notificationsByProject: new Map([
+        [
+          "aipanel",
+          [
+            createNotification({
+              id: "historical-ready-for-review",
+              source: "derived",
+              details: "Assistant finished responding: pong",
+            }),
+          ],
+        ],
+      ]),
     });
 
     const summary = await scanNotifierProjects(state, { catchUp: false }, deps);
@@ -145,7 +156,7 @@ describe("scanNotifierProjects", () => {
     expect(deps.dispatchTelegram).not.toHaveBeenCalled();
   });
 
-  it("second scan sends new task-completion notification", async () => {
+  it("second scan sends new task-ready-for-review notification", async () => {
     const state = createNotifierDaemonState();
     const { deps, mutable } = createHarness({
       projects: [{ slug: "aipanel", name: "aipanel" }],
@@ -170,6 +181,47 @@ describe("scanNotifierProjects", () => {
     expect(items.map((item) => item.id)).toEqual(["new"]);
   });
 
+  it("second scan sends new ping-pong ready-for-review notification", async () => {
+    await withTempConfigDir(async (configDir) => {
+      await setupEnabledTelegram(configDir);
+      const state = createNotifierDaemonState();
+      const sender = vi.fn().mockResolvedValue(undefined);
+
+      const { deps, mutable } = createHarness({
+        projects: [{ slug: "aipanel", name: "aipanel" }],
+        notificationsByProject: new Map([
+          ["aipanel", [createNotification({ id: "base", createdAt: "2026-04-27T08:00:00.000Z" })]],
+        ]),
+      });
+
+      deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
+        return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
+      });
+
+      await scanNotifierProjects(state, { configDir }, deps);
+
+      mutable.notificationsByProject.set("aipanel", [
+        createNotification({ id: "base", createdAt: "2026-04-27T08:00:00.000Z" }),
+        createNotification({
+          id: "session-1-ready-for-review-1777271796753-f8b88b",
+          createdAt: "2026-04-27T08:00:01.000Z",
+          kind: "task",
+          status: "completed",
+          source: "derived",
+          title: "Task ready for review",
+          details: "Assistant finished responding: pong",
+        }),
+      ]);
+
+      const summary = await scanNotifierProjects(state, { configDir }, deps);
+
+      expect(summary.newSinceCursor).toBe(1);
+      expect(summary.eligible).toBe(1);
+      expect(summary.sent).toBe(1);
+      expect(sender).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("permission notification is not sent", async () => {
     await withTempConfigDir(async (configDir) => {
       await setupEnabledTelegram(configDir);
@@ -184,7 +236,7 @@ describe("scanNotifierProjects", () => {
       });
 
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
-        return dispatchTelegramTaskCompletionNotifications(notifications, { configDir, sender });
+        return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
 
       await scanNotifierProjects(state, { configDir }, deps);
@@ -210,7 +262,7 @@ describe("scanNotifierProjects", () => {
     });
   });
 
-  it("question notification is not sent", async () => {
+  it("question notification is sent", async () => {
     await withTempConfigDir(async (configDir) => {
       await setupEnabledTelegram(configDir);
       const state = createNotifierDaemonState();
@@ -224,23 +276,23 @@ describe("scanNotifierProjects", () => {
       });
 
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
-        return dispatchTelegramTaskCompletionNotifications(notifications, { configDir, sender });
+        return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
 
       await scanNotifierProjects(state, { configDir }, deps);
 
       mutable.notificationsByProject.set("aipanel", [
         createNotification({ id: "base", createdAt: "2026-04-27T08:00:00.000Z" }),
-        createNotification({ id: "question", kind: "question", createdAt: "2026-04-27T08:00:02.000Z" }),
+        createNotification({ id: "question", kind: "question", title: "Which option should we use?", status: undefined, createdAt: "2026-04-27T08:00:02.000Z" }),
       ]);
 
       const summary = await scanNotifierProjects(state, { configDir }, deps);
 
       expect(summary.newSinceCursor).toBe(1);
-      expect(summary.eligible).toBe(0);
-      expect(summary.sent).toBe(0);
-      expect(summary.skipped).toBe(1);
-      expect(sender).not.toHaveBeenCalled();
+      expect(summary.eligible).toBe(1);
+      expect(summary.sent).toBe(1);
+      expect(summary.skipped).toBe(0);
+      expect(sender).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -258,7 +310,7 @@ describe("scanNotifierProjects", () => {
       });
 
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
-        return dispatchTelegramTaskCompletionNotifications(notifications, { configDir, sender });
+        return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
 
       await scanNotifierProjects(state, { configDir }, deps);
@@ -361,7 +413,7 @@ describe("scanNotifierProjects", () => {
       });
 
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
-        return dispatchTelegramTaskCompletionNotifications(notifications, { configDir, sender });
+        return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
 
       await scanNotifierProjects(state, { configDir }, deps);
@@ -404,7 +456,7 @@ describe("scanNotifierProjects", () => {
       });
 
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
-        return dispatchTelegramTaskCompletionNotifications(notifications, { configDir, sender });
+        return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
 
       await scanNotifierProjects(state, { configDir }, deps);
@@ -441,7 +493,7 @@ describe("scanNotifierProjects", () => {
       });
 
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
-        return dispatchTelegramTaskCompletionNotifications(notifications, { configDir, sender });
+        return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
 
       await scanNotifierProjects(state, { configDir }, deps);
@@ -477,7 +529,7 @@ describe("scanNotifierProjects", () => {
       });
 
       deps.dispatchTelegram = vi.fn(async (notifications: ClaudeNotification[]) => {
-        return dispatchTelegramTaskCompletionNotifications(notifications, { configDir, sender });
+        return dispatchTelegramHumanInterventionNotifications(notifications, { configDir, sender });
       });
 
       await scanNotifierProjects(state, { configDir }, deps);
@@ -617,16 +669,17 @@ describe("runNotifierDaemon", () => {
     mutable.notificationsByProject.set("aipanel", [
       createNotification({ id: "base", createdAt: "2026-04-27T08:00:00.000Z" }),
       createNotification({ id: "permission", kind: "permission", createdAt: "2026-04-27T08:00:01.000Z" }),
-      createNotification({ id: "task-complete", kind: "task", status: "completed", createdAt: "2026-04-27T08:00:02.000Z" }),
+      createNotification({ id: "question", kind: "question", title: "Which option should we use?", status: undefined, createdAt: "2026-04-27T08:00:02.000Z" }),
+      createNotification({ id: "task-complete", kind: "task", status: "completed", createdAt: "2026-04-27T08:00:03.000Z" }),
     ]);
 
     const summary = await scanNotifierProjects(state, { dryRun: true }, deps);
 
-    expect(summary.newSinceCursor).toBe(2);
-    expect(summary.considered).toBe(2);
-    expect(summary.eligible).toBe(1);
+    expect(summary.newSinceCursor).toBe(3);
+    expect(summary.considered).toBe(3);
+    expect(summary.eligible).toBe(2);
     expect(summary.sent).toBe(0);
-    expect(summary.skipped).toBe(2);
+    expect(summary.skipped).toBe(3);
     expect(deps.dispatchTelegram).not.toHaveBeenCalled();
   });
 

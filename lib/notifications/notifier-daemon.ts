@@ -9,11 +9,11 @@ import { getDefaultNotificationSettings, loadNotificationSettings } from "@/lib/
 import { getProjectNotifications } from "@/lib/services/aggregator";
 import { loadProjectsConfig } from "@/lib/config/loader";
 import { sanitizeDeliveryError } from "@/lib/notifications/delivery-log";
+import { isHumanInterventionNotification } from "@/lib/notifications/human-intervention";
 import {
-  dispatchTelegramTaskCompletionNotifications,
-  type TelegramTaskDispatchSummary,
-} from "@/lib/notifications/telegram-task-dispatcher";
-import { isTaskCompletionNotification } from "@/lib/notifications/task-completion";
+  dispatchTelegramHumanInterventionNotifications,
+  type TelegramHumanInterventionDispatchSummary,
+} from "@/lib/notifications/telegram-human-intervention-dispatcher";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 
 export type NotifierDaemonOptions = {
@@ -68,7 +68,7 @@ export type NotifierLogger = {
 export type NotifierDependencies = {
   loadProjects: typeof loadProjectsConfig;
   getProjectNotifications: typeof getProjectNotifications;
-  dispatchTelegram: typeof dispatchTelegramTaskCompletionNotifications;
+  dispatchTelegram: typeof dispatchTelegramHumanInterventionNotifications;
   loadSettings: typeof loadNotificationSettings;
   loadSecrets: typeof loadNotificationSecrets;
 };
@@ -102,14 +102,14 @@ export function createNotifierDefaultDependencies(): NotifierDependencies {
   return {
     loadProjects: loadProjectsConfig,
     getProjectNotifications,
-    dispatchTelegram: dispatchTelegramTaskCompletionNotifications,
+    dispatchTelegram: dispatchTelegramHumanInterventionNotifications,
     loadSettings: loadNotificationSettings,
     loadSecrets: loadNotificationSecrets,
 
   };
 }
 
-function createEmptyDispatchSummary(): TelegramTaskDispatchSummary {
+function createEmptyDispatchSummary(): TelegramHumanInterventionDispatchSummary {
   return {
     considered: 0,
     eligible: 0,
@@ -119,7 +119,10 @@ function createEmptyDispatchSummary(): TelegramTaskDispatchSummary {
   };
 }
 
-function sumDispatch(left: TelegramTaskDispatchSummary, right: TelegramTaskDispatchSummary): TelegramTaskDispatchSummary {
+function sumDispatch(
+  left: TelegramHumanInterventionDispatchSummary,
+  right: TelegramHumanInterventionDispatchSummary,
+): TelegramHumanInterventionDispatchSummary {
   return {
     considered: left.considered + right.considered,
     eligible: left.eligible + right.eligible,
@@ -231,7 +234,7 @@ export async function scanNotifierProjects(
       }
 
       if (options.dryRun && newNotifications.length > 0) {
-        dispatchSummary.eligible = newNotifications.filter((notification) => isTaskCompletionNotification(notification)).length;
+        dispatchSummary.eligible = newNotifications.filter((notification) => isHumanInterventionNotification(notification)).length;
       }
 
       const nextCursor = advanceNotificationCursor(cursor, notifications);
