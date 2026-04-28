@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { notificationEventKeySchema } from "@/lib/notifications/events";
 
 export const notificationKindSchema = z.enum(["question", "permission", "task", "alert"]);
 export const notificationChannelSchema = z.enum(["inApp", "browser", "telegram", "macos"]);
@@ -10,6 +11,15 @@ const channelsSchema = z
     browser: z.boolean(),
     telegram: z.boolean(),
     macos: z.boolean(),
+  })
+  .strict();
+
+const channelEventsSchema = z
+  .object({
+    inApp: z.array(notificationEventKeySchema),
+    browser: z.array(notificationEventKeySchema),
+    telegram: z.array(notificationEventKeySchema),
+    macos: z.array(notificationEventKeySchema),
   })
   .strict();
 
@@ -72,6 +82,7 @@ export const notificationSettingsSchema = z
   .object({
     enabled: z.boolean(),
     channels: channelsSchema,
+    channelEvents: channelEventsSchema,
     defaults: z
       .object({
         contextTokensThreshold: z.number().finite().positive(),

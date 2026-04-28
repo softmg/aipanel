@@ -245,7 +245,7 @@ describe("scanNotifierProjects", () => {
     });
   });
 
-  it("permission notification is not sent", async () => {
+  it("permission notification is sent by default", async () => {
     await withTempConfigDir(async (configDir) => {
       await setupEnabledTelegram(configDir);
       const state = createNotifierDaemonState();
@@ -279,10 +279,10 @@ describe("scanNotifierProjects", () => {
 
       expect(summary.newSinceCursor).toBe(1);
       expect(summary.considered).toBe(1);
-      expect(summary.eligible).toBe(0);
-      expect(summary.sent).toBe(0);
-      expect(summary.skipped).toBe(1);
-      expect(sender).not.toHaveBeenCalled();
+      expect(summary.eligible).toBe(1);
+      expect(summary.sent).toBe(1);
+      expect(summary.skipped).toBe(0);
+      expect(sender).toHaveBeenCalledTimes(1);
       expect(deps.dispatchMacos).toHaveBeenCalledTimes(1);
     });
   });

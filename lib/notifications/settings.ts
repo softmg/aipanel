@@ -2,6 +2,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  normalizeChannelEventSelections,
+  getDefaultChannelEventSelections,
+} from "@/lib/notifications/events";
+import {
   notificationSettingsSchema,
   type NotificationSettings,
 } from "@/lib/notifications/schema";
@@ -24,6 +28,7 @@ export function getDefaultNotificationSettings(): NotificationSettings {
       telegram: false,
       macos: false,
     },
+    channelEvents: getDefaultChannelEventSelections(),
     defaults: {
       contextTokensThreshold: DEFAULT_CONTEXT_TOKENS_THRESHOLD,
       suppressBrowserWhenVisible: true,
@@ -54,6 +59,7 @@ export function getDefaultNotificationSettings(): NotificationSettings {
 
 
 type LegacyNotificationSettings = {
+  channelEvents?: unknown;
   defaults?: {
     mainSessionInputTokens?: unknown;
     contextTokensThreshold?: unknown;
@@ -88,6 +94,10 @@ function migrateLegacyNotificationSettings(parsed: unknown): unknown {
     }
   }
 
+  migrated.channelEvents = normalizeChannelEventSelections(migrated.channelEvents, {
+    appendApiFailureForLegacyExternalDefault: true,
+  });
+
   return migrated;
 }
 
@@ -108,7 +118,12 @@ export async function loadNotificationSettings(
   }
 
   try {
-    return notificationSettingsSchema.parse(migrateLegacyNotificationSettings(JSON.parse(raw)));
+    const migrated = migrateLegacyNotificationSettings(JSON.parse(raw));
+    const parsed = notificationSettingsSchema.parse(migrated);
+    return {
+      ...parsed,
+      channelEvents: normalizeChannelEventSelections(parsed.channelEvents),
+    };
   } catch {
     return getDefaultNotificationSettings();
   }
@@ -118,7 +133,10 @@ export async function saveNotificationSettings(
   settings: NotificationSettings,
   options: NotificationSettingsOptions = {},
 ): Promise<void> {
-  const parsed = notificationSettingsSchema.parse(settings);
+  const parsed = notificationSettingsSchema.parse({
+    ...settings,
+    channelEvents: normalizeChannelEventSelections(settings.channelEvents),
+  });
   const settingsPath = getNotificationSettingsPath(options);
 
   try {

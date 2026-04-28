@@ -191,10 +191,11 @@ describe("GET /api/realtime", () => {
             projectSlug: "aipanel",
             projectLabel: "aipanel",
             sessionLabel: "session · session-1",
+            source: undefined,
           },
         ],
       });
-      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).toHaveBeenCalledTimes(1);
     } finally {
       await stream.close();
     }
@@ -239,7 +240,7 @@ describe("GET /api/realtime", () => {
       expect(notificationEvents.map((event) => event.event)).toEqual(["notification"]);
       expect(updateEvents.map((event) => event.event)).toEqual(["update"]);
       expect(notificationEvents[0]?.data).toMatchObject({ items: [{ id: "new" }] });
-      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).toHaveBeenCalledTimes(1);
     } finally {
       await stream.close();
       vi.useRealTimers();
@@ -311,7 +312,7 @@ describe("GET /api/realtime", () => {
     }
   });
 
-  it("does not invoke Telegram dispatcher for new permission or alert notifications", async () => {
+  it("invokes Telegram dispatcher for new permission notifications but not context alerts", async () => {
     const permissionNotification = createNotification("permission", "2026-04-25T10:00:01.000Z");
     permissionNotification.kind = "permission";
     const alertNotification = createNotification("alert", "2026-04-25T10:00:02.000Z");
@@ -324,7 +325,10 @@ describe("GET /api/realtime", () => {
     try {
       expect((await readEvents(stream)).map((event) => event.event)).toEqual(["notification"]);
       expect((await readEvents(stream)).map((event) => event.event)).toEqual(["ready"]);
-      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).not.toHaveBeenCalled();
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).toHaveBeenCalledTimes(1);
+      expect(telegramDispatcher.dispatchTelegramHumanInterventionNotifications).toHaveBeenCalledWith([
+        expect.objectContaining({ id: "permission", kind: "permission" }),
+      ]);
     } finally {
       await stream.close();
     }

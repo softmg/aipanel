@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 export type RealtimeNotificationItem = {
   id: string;
   kind: "question" | "permission" | "task" | "alert";
+  source?: "log" | "derived";
   title: string;
   createdAt: string;
   projectSlug?: string;

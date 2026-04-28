@@ -78,7 +78,7 @@ describe("dispatchMacOSHumanInterventionNotifications", () => {
     });
   });
 
-  it("does not send permission/tool or alert notifications", async () => {
+  it("sends permission/tool and skips context alerts", async () => {
     await withTempConfigDir(async (configDir) => {
       await setupEnabledMacOS(configDir);
       const sender = vi.fn().mockResolvedValue({ ok: true });
@@ -91,8 +91,8 @@ describe("dispatchMacOSHumanInterventionNotifications", () => {
         { configDir, sender },
       );
 
-      expect(sender).not.toHaveBeenCalled();
-      expect(summary).toEqual({ considered: 2, eligible: 0, sent: 0, skipped: 2, failed: 0 });
+      expect(sender).toHaveBeenCalledTimes(1);
+      expect(summary).toEqual({ considered: 2, eligible: 1, sent: 1, skipped: 1, failed: 0 });
     });
   });
 

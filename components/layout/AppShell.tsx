@@ -6,7 +6,13 @@ import { NotificationsPanel } from "@/components/layout/NotificationsPanel";
 import { RealtimeUpdates, type RealtimeNotificationItem } from "@/components/layout/RealtimeUpdates";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { ProjectSidebar } from "@/components/projects/ProjectSidebar";
+import {
+  getNotificationEventKey,
+  isNotificationSelectedForChannel,
+  normalizeChannelEventSelections,
+} from "@/lib/notifications/events";
 import { shouldShowBrowserDesktopAlert } from "@/lib/notifications/browser-delivery";
+import { notificationSettingsSchema } from "@/lib/notifications/schema";
 import {
   getBrowserNotificationStatus,
   type BrowserNotificationStatus,
@@ -102,6 +108,10 @@ export function AppShell({ projects, activeSlug, notifications = [], notificatio
   const [browserRuntimeStatus, setBrowserRuntimeStatus] = useState<BrowserRuntimeStatus>(
     DEFAULT_BROWSER_RUNTIME_STATUS,
   );
+  const [browserChannelEnabled, setBrowserChannelEnabled] = useState(true);
+  const [browserChannelEvents, setBrowserChannelEvents] = useState(
+    normalizeChannelEventSelections(undefined).browser,
+  );
   const seenNotificationKeysRef = useRef<Set<string>>(new Set());
   const sentAtRef = useRef<number[]>([]);
 
@@ -129,9 +139,41 @@ export function AppShell({ projects, activeSlug, notifications = [], notificatio
     };
   }, []);
 
+  useEffect(() => {
+    let ignore = false;
+
+    const loadChannelSettings = async () => {
+      try {
+        const response = await fetch("/api/notification-settings", { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error("Unable to load notification settings");
+        }
+
+        const settings = notificationSettingsSchema.parse(await response.json());
+        if (ignore) {
+          return;
+        }
+
+        setBrowserChannelEnabled(settings.enabled && settings.channels.browser);
+        setBrowserChannelEvents(normalizeChannelEventSelections(settings.channelEvents).browser);
+      } catch {
+        if (!ignore) {
+          setBrowserChannelEnabled(true);
+          setBrowserChannelEvents(normalizeChannelEventSelections(undefined).browser);
+        }
+      }
+    };
+
+    void loadChannelSettings();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
   const handleIncomingNotifications = (items: RealtimeNotificationItem[]) => {
     const runtimeStatus = getBrowserRuntimeStatus();
-    if (!browserDesktopAlertsEnabled || !runtimeStatus.notificationSupported) {
+    if (!browserDesktopAlertsEnabled || !browserChannelEnabled || !runtimeStatus.notificationSupported) {
       return;
     }
     if (runtimeStatus.permission !== "granted") {
@@ -151,9 +193,18 @@ export function AppShell({ projects, activeSlug, notifications = [], notificatio
       sentAtRef.current = sentAtRef.current.filter((timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS);
       const rateLimited = sentAtRef.current.length >= RATE_LIMIT_MAX_NOTIFICATIONS;
       if (
+        !isNotificationSelectedForChannel(
+          { inApp: [], browser: browserChannelEvents, telegram: [], macos: [] },
+          "browser",
+          getNotificationEventKey({
+            ...item,
+            source: item.source ?? "derived",
+            sessionId: "realtime",
+          }),
+        ) ||
         !shouldShowBrowserDesktopAlert({
           realtimeEnabled,
-          browserNotificationsEnabled: browserDesktopAlertsEnabled,
+          browserNotificationsEnabled: browserDesktopAlertsEnabled && browserChannelEnabled,
           notificationSupported: runtimeStatus.notificationSupported,
           permission: runtimeStatus.permission,
           visibilityState: runtimeStatus.visibilityState,

@@ -9,6 +9,7 @@ import {
   mergeNotificationsWithContextThresholds,
   parseSessionNotifications,
 } from "@/lib/sources/claude-code/notifications";
+import { getNotificationEventKey } from "@/lib/notifications/events";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 
 afterEach(() => {
@@ -420,5 +421,195 @@ describe("claude-code notifications", () => {
 
     expect(merged).toHaveLength(1);
     expect(merged[0]?.id).toBe("n-newer");
+  });
+
+  it("creates api_failure notification from structured isApiErrorMessage true", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-notifications-"));
+    const filePath = path.join(tempRoot, "api-structured-flag.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: "system",
+          uuid: "api-1",
+          timestamp: "2026-04-28T10:00:00.000Z",
+          sessionId: "api-structured-flag",
+          isApiErrorMessage: true,
+          error: "rate_limit",
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const notifications = await parseSessionNotifications(filePath);
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0]).toMatchObject({ kind: "alert", status: "api_failure", title: "AI provider/API error" });
+      expect(getNotificationEventKey(notifications[0]!)).toBe("error.api_failure");
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("creates api_failure notification from structured apiErrorStatus 429", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-notifications-"));
+    const filePath = path.join(tempRoot, "api-structured-429.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: "system",
+          uuid: "api-2",
+          timestamp: "2026-04-28T10:01:00.000Z",
+          sessionId: "api-structured-429",
+          apiErrorStatus: 429,
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const notifications = await parseSessionNotifications(filePath);
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0]).toMatchObject({ kind: "alert", status: "api_failure" });
+      expect(notifications[0]?.details).toContain("429");
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("creates api_failure notifications from structured apiErrorStatus 502/503/504", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-notifications-"));
+    const filePath = path.join(tempRoot, "api-structured-5xx.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: "system",
+          uuid: "api-502",
+          timestamp: "2026-04-28T10:02:00.000Z",
+          sessionId: "api-structured-5xx",
+          apiErrorStatus: 502,
+        }),
+        JSON.stringify({
+          type: "system",
+          uuid: "api-503",
+          timestamp: "2026-04-28T10:03:00.000Z",
+          sessionId: "api-structured-5xx",
+          apiErrorStatus: 503,
+        }),
+        JSON.stringify({
+          type: "system",
+          uuid: "api-504",
+          timestamp: "2026-04-28T10:04:00.000Z",
+          sessionId: "api-structured-5xx",
+          apiErrorStatus: 504,
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const notifications = await parseSessionNotifications(filePath);
+      const apiFailures = notifications.filter((item) => item.status === "api_failure");
+      expect(apiFailures).toHaveLength(3);
+      expect(apiFailures.map((item) => item.details)).toEqual(
+        expect.arrayContaining([expect.stringContaining("502"), expect.stringContaining("503"), expect.stringContaining("504")]),
+      );
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("uses text fallback for strong API Error signatures", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-notifications-"));
+    const filePath = path.join(tempRoot, "api-fallback-strong.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: "error",
+          uuid: "api-3",
+          timestamp: "2026-04-28T10:05:00.000Z",
+          sessionId: "api-fallback-strong",
+          content: "API Error: fetch failed with UND_ERR_CONNECT_TIMEOUT",
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const notifications = await parseSessionNotifications(filePath);
+      expect(notifications).toHaveLength(1);
+      expect(notifications[0]).toMatchObject({ kind: "alert", status: "api_failure" });
+      expect(notifications[0]?.details).toContain("API Error:");
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does not false-positive on assistant text mentioning API Error", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-notifications-"));
+    const filePath = path.join(tempRoot, "api-fallback-false-positive.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: "assistant",
+          uuid: "assistant-api-mention",
+          timestamp: "2026-04-28T10:06:00.000Z",
+          sessionId: "api-fallback-false-positive",
+          message: {
+            role: "assistant",
+            stop_reason: "end_turn",
+            content: [{ type: "text", text: "The phrase API Error: is shown as an example in docs." }],
+          },
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const notifications = await parseSessionNotifications(filePath);
+      expect(notifications.some((item) => item.status === "api_failure")).toBe(false);
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("redacts token-like strings in api_failure details", async () => {
+    const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-claude-notifications-"));
+    const filePath = path.join(tempRoot, "api-redaction.jsonl");
+
+    await fs.writeFile(
+      filePath,
+      [
+        JSON.stringify({
+          type: "system",
+          uuid: "api-4",
+          timestamp: "2026-04-28T10:07:00.000Z",
+          sessionId: "api-redaction",
+          isApiErrorMessage: true,
+          error: "API Error: rate_limit TOKEN=secret-value 123456:AbCdEfGhIj",
+        }),
+      ].join("\n"),
+      "utf8",
+    );
+
+    try {
+      const notifications = await parseSessionNotifications(filePath);
+      expect(notifications).toHaveLength(1);
+      const details = notifications[0]?.details ?? "";
+      expect(details).toContain("[redacted]");
+      expect(details).not.toContain("TOKEN=secret-value");
+      expect(details).not.toContain("123456:AbCdEfGhIj");
+    } finally {
+      await fs.rm(tempRoot, { recursive: true, force: true });
+    }
   });
 });

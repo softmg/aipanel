@@ -1,5 +1,5 @@
 import { getGlobalNotificationRule } from "@/lib/notifications/global-settings";
-import { isHumanInterventionNotification } from "@/lib/notifications/human-intervention";
+import { isNotificationSelectedForChannel } from "@/lib/notifications/events";
 import { sendTelegramNotification, type TelegramNotificationConfig } from "@/lib/notifications/channels/telegram";
 import {
   hasSuccessfulDelivery,
@@ -100,7 +100,7 @@ export async function dispatchTelegramHumanInterventionNotifications(
   const sender = options.sender ?? sendTelegramNotification;
 
   for (const notification of notifications) {
-    if (!isHumanInterventionNotification(notification)) {
+    if (!isNotificationSelectedForChannel(settings.channelEvents, "telegram", notification)) {
       summary.skipped += 1;
       continue;
     }

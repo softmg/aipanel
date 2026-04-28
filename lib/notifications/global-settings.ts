@@ -1,4 +1,9 @@
 import {
+  getDefaultChannelEventSelections,
+  normalizeChannelEventSelections,
+  type NotificationChannelEventSelections,
+} from "@/lib/notifications/events";
+import {
   notificationSettingsSchema,
   type NotificationKind,
   type NotificationRule,
@@ -12,6 +17,7 @@ export type GlobalNotificationSettingsInput = {
   kinds: NotificationKind[];
   contextTokensThreshold: number;
   channels: NotificationSettings["channels"];
+  channelEvents?: NotificationChannelEventSelections;
 };
 
 type GlobalNotificationRule = Extract<NotificationRule, { scope: "global" }>;
@@ -49,6 +55,7 @@ export function ensureGlobalNotificationRule(settings: NotificationSettings): No
   return parseSettings({
     enabled: settings.enabled,
     channels: cloneChannels(settings.channels),
+    channelEvents: cloneChannelEvents(settings.channelEvents),
     defaults: cloneDefaults(settings.defaults),
     rules,
   });
@@ -81,6 +88,7 @@ export function updateGlobalNotificationSettings(
   return parseSettings({
     enabled: input.enabled,
     channels: cloneChannels(input.channels),
+    channelEvents: cloneChannelEvents(input.channelEvents ?? getDefaultChannelEventSelections()),
     defaults: cloneDefaults(settings.defaults, input.contextTokensThreshold),
     rules: [defaultRule],
   });
@@ -101,6 +109,7 @@ export function normalizeGlobalNotificationSettings(settings: NotificationSettin
   return parseSettings({
     enabled: settings.enabled,
     channels,
+    channelEvents: normalizeChannelEventSelections(settings.channelEvents),
     defaults: cloneDefaults(settings.defaults),
     rules: [defaultRule],
   });
@@ -197,6 +206,12 @@ function cloneChannels(channels: NotificationSettings["channels"]): Notification
     telegram: channels.telegram,
     macos: channels.macos,
   };
+}
+
+function cloneChannelEvents(
+  channelEvents: NotificationChannelEventSelections | undefined,
+): NotificationSettings["channelEvents"] {
+  return normalizeChannelEventSelections(channelEvents ?? getDefaultChannelEventSelections());
 }
 
 function mergeChannels(

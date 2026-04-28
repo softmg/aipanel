@@ -6,8 +6,9 @@ import {
   parseRealtimeSinceParam,
   type NotificationCursor,
 } from "@/lib/notifications/notification-cursor";
-import { isHumanInterventionNotification } from "@/lib/notifications/human-intervention";
+import { isNotificationSelectedForChannel } from "@/lib/notifications/events";
 import { dispatchTelegramHumanInterventionNotifications } from "@/lib/notifications/telegram-human-intervention-dispatcher";
+import { loadNotificationSettings } from "@/lib/notifications/settings";
 import { getProjectCards, getProjectDetail, getProjectNotifications } from "@/lib/services/aggregator";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 
@@ -20,7 +21,7 @@ const searchSchema = z.object({
 
 type RealtimeNotificationPayload = Pick<
   ClaudeNotification,
-  "id" | "kind" | "title" | "createdAt" | "projectSlug" | "projectLabel" | "sessionLabel" | "status"
+  "id" | "kind" | "title" | "createdAt" | "projectSlug" | "projectLabel" | "sessionLabel" | "status" | "source"
 >;
 
 function toRealtimeNotificationPayload(notification: ClaudeNotification): RealtimeNotificationPayload {
@@ -33,6 +34,7 @@ function toRealtimeNotificationPayload(notification: ClaudeNotification): Realti
     projectLabel: notification.projectLabel,
     sessionLabel: notification.sessionLabel,
     status: notification.status,
+    source: notification.source,
   };
 }
 
@@ -122,10 +124,11 @@ export async function GET(request: Request) {
 
         inFlight = true;
         try {
-          const [cards, detail, notifications] = await Promise.all([
+          const [cards, detail, notifications, settings] = await Promise.all([
             getProjectCards({ includeBeads: true }),
             activeSlug ? getProjectDetail(activeSlug) : Promise.resolve(null),
             activeSlug ? getProjectNotifications(activeSlug) : Promise.resolve([]),
+            loadNotificationSettings(),
           ]);
 
           const notificationPayload = notifications.map(toRealtimeNotificationPayload);
@@ -138,12 +141,19 @@ export async function GET(request: Request) {
               )
               : [];
 
-            emitNotifications(newNotifications.map(toRealtimeNotificationPayload), write);
-
-            const humanInterventionNotifications = newNotifications.filter(isHumanInterventionNotification);
-            if (humanInterventionNotifications.length > 0) {
-              void dispatchTelegramHumanInterventionNotifications(humanInterventionNotifications).catch(() => undefined);
+            const telegramNotifications = newNotifications.filter((notification) => (
+              isNotificationSelectedForChannel(settings.channelEvents, "telegram", notification)
+            ));
+            if (telegramNotifications.length > 0) {
+              void dispatchTelegramHumanInterventionNotifications(telegramNotifications).catch(() => undefined);
             }
+            const inAppNotifications = newNotifications.filter((notification) => (
+              settings.enabled &&
+              settings.channels.inApp &&
+              isNotificationSelectedForChannel(settings.channelEvents, "inApp", notification)
+            ));
+
+            emitNotifications(inAppNotifications.map(toRealtimeNotificationPayload), write);
 
             notificationCursor = advanceNotificationCursor(notificationCursor, notifications);
             notificationCursorSeeded = true;

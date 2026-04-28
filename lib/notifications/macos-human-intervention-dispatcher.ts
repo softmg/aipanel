@@ -10,8 +10,8 @@ import {
   recordDeliverySuccess,
   type DeliveryLogRecordInput,
 } from "@/lib/notifications/delivery-log";
+import { isNotificationSelectedForChannel } from "@/lib/notifications/events";
 import { getGlobalNotificationRule } from "@/lib/notifications/global-settings";
-import { isHumanInterventionNotification } from "@/lib/notifications/human-intervention";
 import { loadNotificationSettings } from "@/lib/notifications/settings";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 
@@ -80,7 +80,7 @@ export async function dispatchMacOSHumanInterventionNotifications(
   const sender = options.sender ?? sendMacOSNativeNotification;
 
   for (const notification of notifications) {
-    if (!isHumanInterventionNotification(notification)) {
+    if (!isNotificationSelectedForChannel(settings.channelEvents, "macos", notification)) {
       summary.skipped += 1;
       continue;
     }

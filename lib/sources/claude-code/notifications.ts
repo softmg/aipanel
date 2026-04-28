@@ -23,6 +23,11 @@ type RawEvent = {
   agentName?: string;
   operation?: string;
   content?: string;
+  level?: string;
+  error?: unknown;
+  event?: string;
+  isApiErrorMessage?: boolean;
+  apiErrorStatus?: unknown;
   message?: {
     id?: string;
     role?: string;
@@ -62,6 +67,20 @@ const COMPLETION_TEXT_PATTERN = /\b(completed?|done|finished|succeeded|success)\
 const MAX_SESSION_FILES = 12;
 const MAX_NOTIFICATIONS = 50;
 const MAX_READY_FOR_REVIEW_DETAILS_LENGTH = 240;
+const MAX_API_FAILURE_DETAILS_LENGTH = 240;
+const API_ERROR_PREFIX_PATTERN = /\bAPI\s*Error\s*:/i;
+const API_FAILURE_FALLBACK_DETAIL_PATTERNS: RegExp[] = [
+  /\bfetch\s+failed\b/i,
+  /\btimeout\b/i,
+  /\brate\s*limit(?:ed)?\b/i,
+  /\b429\b/,
+  /\b502\b/,
+  /\b503\b/,
+  /\b504\b/,
+  /\bUND_ERR_CONNECT_TIMEOUT\b/i,
+  /\bConnect\s+Timeout\s+Error\b/i,
+];
+const STRUCTURED_API_ERROR_VALUE_PATTERN = /\b(rate[_\s-]*limit(?:ed)?|timeout|fetch[_\s-]*failed|api[_\s-]*error|provider[_\s-]*error|connection[_\s-]*error|network[_\s-]*error|bad[_\s-]*gateway|service[_\s-]*unavailable|gateway[_\s-]*timeout)\b/i;
 const SECRET_PATTERNS: RegExp[] = [
   /\b\d{5,}:[A-Za-z0-9_-]{5,}\b/g,
   /\bbot\d{5,}:[A-Za-z0-9_-]{5,}\b/gi,
@@ -236,11 +255,136 @@ function buildReadyForReviewNotification(candidate: ReadyForReviewCandidate): Cl
   };
 }
 
+function toKnownApiErrorStatus(value: unknown): number | null {
+  const numeric = typeof value === "number" ? value : typeof value === "string" ? Number.parseInt(value, 10) : Number.NaN;
+  if (!Number.isFinite(numeric)) {
+    return null;
+  }
+
+  const status = Math.trunc(numeric);
+  return [429, 502, 503, 504].includes(status) ? status : null;
+}
+
+function getStructuredApiErrorText(event: RawEvent): string | null {
+  const candidates: string[] = [];
+
+  if (typeof event.error === "string") {
+    candidates.push(event.error);
+  }
+
+  if (event.error && typeof event.error === "object") {
+    try {
+      const serialized = JSON.stringify(event.error);
+      if (serialized) {
+        candidates.push(serialized);
+      }
+    } catch {
+      // ignore non-serializable error payloads
+    }
+  }
+
+  if (typeof event.content === "string") {
+    candidates.push(event.content);
+  }
+
+  if (typeof event.message?.content === "string") {
+    candidates.push(event.message.content);
+  }
+
+  if (Array.isArray(event.message?.content)) {
+    const text = extractTextContent(event.message.content);
+    if (text) {
+      candidates.push(text);
+    }
+  }
+
+  const normalizedCandidates = candidates.map((candidate) => collapseWhitespace(candidate)).filter(Boolean);
+  const status = toKnownApiErrorStatus(event.apiErrorStatus);
+
+  if (status !== null) {
+    const withStatus = normalizedCandidates.find((candidate) => new RegExp(`\\b${status}\\b`).test(candidate));
+    if (withStatus) {
+      return withStatus;
+    }
+    return `API Error: HTTP ${status}`;
+  }
+
+  const fromError = normalizedCandidates.find((candidate) => STRUCTURED_API_ERROR_VALUE_PATTERN.test(candidate));
+  if (fromError) {
+    return fromError;
+  }
+
+  if (event.isApiErrorMessage === true) {
+    return normalizedCandidates[0] ?? "API Error";
+  }
+
+  return null;
+}
+
+function getFallbackApiFailureText(event: RawEvent): string | null {
+  const candidates: string[] = [];
+
+  if (typeof event.content === "string") {
+    candidates.push(event.content);
+  }
+
+  if (typeof event.error === "string") {
+    candidates.push(event.error);
+  } else if (event.error && typeof event.error === "object") {
+    try {
+      candidates.push(JSON.stringify(event.error));
+    } catch {
+      // ignore non-serializable error payloads
+    }
+  }
+
+  const normalizedCandidates = candidates.map((value) => collapseWhitespace(value)).filter(Boolean);
+
+  return normalizedCandidates.find((text) => (
+    API_ERROR_PREFIX_PATTERN.test(text)
+    && API_FAILURE_FALLBACK_DETAIL_PATTERNS.some((pattern) => pattern.test(text))
+  )) ?? null;
+}
+
+function buildApiFailureNotification(event: RawEvent, sessionId: string, eventIndex: number): ClaudeNotification | null {
+  const structuredFieldsPresent = event.isApiErrorMessage === true
+    || event.apiErrorStatus !== undefined
+    || event.error !== undefined;
+  const detailsText = structuredFieldsPresent
+    ? getStructuredApiErrorText(event)
+    : getFallbackApiFailureText(event);
+  if (!detailsText) {
+    return null;
+  }
+
+  const createdAt = asIso(event.timestamp) ?? new Date(0).toISOString();
+  const sessionLabel = buildSessionLabel(event, sessionId);
+  const baseId = event.uuid ?? `${sessionId}-${eventIndex}`;
+  const safeDetails = truncate(redactNotificationText(detailsText), MAX_API_FAILURE_DETAILS_LENGTH);
+
+  return {
+    id: `${baseId}-api-failure-${hashContent(safeDetails)}`,
+    sessionId,
+    sessionLabel,
+    createdAt,
+    kind: "alert",
+    title: "AI provider/API error",
+    details: safeDetails,
+    status: "api_failure",
+    source: "derived",
+  };
+}
+
 function extractNotificationsFromEvent(event: RawEvent, sessionId: string, eventIndex: number): ClaudeNotification[] {
   const createdAt = asIso(event.timestamp) ?? new Date(0).toISOString();
   const sessionLabel = buildSessionLabel(event, sessionId);
   const baseId = event.uuid ?? `${sessionId}-${eventIndex}`;
   const notifications: ClaudeNotification[] = [];
+
+  const apiFailure = buildApiFailureNotification(event, sessionId, eventIndex);
+  if (apiFailure) {
+    notifications.push(apiFailure);
+  }
 
   if (event.type === "assistant" && event.message?.role === "assistant") {
     const content = Array.isArray(event.message.content) ? event.message.content : [];

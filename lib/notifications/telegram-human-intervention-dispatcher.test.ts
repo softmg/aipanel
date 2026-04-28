@@ -65,7 +65,7 @@ describe("dispatchTelegramHumanInterventionNotifications", () => {
     });
   });
 
-  it("skips permission requests, context alerts, and running tasks", async () => {
+  it("sends permission requests and skips context alerts/running tasks", async () => {
     await withTempConfigDir(async (configDir) => {
       await setupEnabledTelegram(configDir);
       const sender = vi.fn().mockResolvedValue(undefined);
@@ -79,8 +79,8 @@ describe("dispatchTelegramHumanInterventionNotifications", () => {
         { configDir, sender },
       );
 
-      expect(sender).not.toHaveBeenCalled();
-      expect(summary).toEqual({ considered: 3, eligible: 0, sent: 0, skipped: 3, failed: 0 });
+      expect(sender).toHaveBeenCalledTimes(1);
+      expect(summary).toEqual({ considered: 3, eligible: 1, sent: 1, skipped: 2, failed: 0 });
     });
   });
 

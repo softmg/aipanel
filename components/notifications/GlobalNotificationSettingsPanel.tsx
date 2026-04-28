@@ -2,23 +2,53 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  ALL_NOTIFICATION_EVENT_KEYS,
+  NOTIFICATION_EVENT_GROUPS,
+  normalizeChannelEventSelections,
+  type NotificationChannelEventSelections,
+  type NotificationEventKey,
+} from "@/lib/notifications/events";
+import {
   getGlobalNotificationRule,
   normalizeGlobalNotificationSettings,
   updateGlobalNotificationSettings,
 } from "@/lib/notifications/global-settings";
 import { notificationSettingsSchema, type NotificationChannel, type NotificationKind, type NotificationSettings } from "@/lib/notifications/schema";
 
-const KIND_OPTIONS: Array<{ kind: NotificationKind; label: string }> = [
-  { kind: "question", label: "Questions from Claude" },
-  { kind: "permission", label: "Permission/tool requests" },
-  { kind: "task", label: "Background task notifications" },
-  { kind: "alert", label: "Context threshold alerts" },
-];
+const ALL_NOTIFICATION_KINDS: NotificationKind[] = ["question", "permission", "task", "alert"];
 
-const CHANNEL_OPTIONS: Array<{ channel: Exclude<NotificationChannel, "telegram">; label: string; disabled?: boolean }> = [
+const CHANNEL_OPTIONS: Array<{ channel: NotificationChannel; label: string }> = [
   { channel: "inApp", label: "In-app" },
   { channel: "browser", label: "Browser desktop alert" },
-  { channel: "macos", label: "macOS native notification" },
+  { channel: "telegram", label: "Telegram" },
+  { channel: "macos", label: "macOS" },
+];
+
+const DELIVERY_ROWS: Array<{ id: string; label: string; description: string; events: NotificationEventKey[] }> = [
+  {
+    id: "action_required",
+    label: "Action required",
+    description: "Question, permission request, task ready for review",
+    events: NOTIFICATION_EVENT_GROUPS.action_required,
+  },
+  {
+    id: "updates",
+    label: "Updates",
+    description: "Task update",
+    events: NOTIFICATION_EVENT_GROUPS.updates,
+  },
+  {
+    id: "alerts",
+    label: "Alerts",
+    description: "Context threshold",
+    events: NOTIFICATION_EVENT_GROUPS.alerts,
+  },
+  {
+    id: "failures",
+    label: "Failures",
+    description: "API/provider failure",
+    events: NOTIFICATION_EVENT_GROUPS.failures,
+  },
 ];
 
 type LoadState = "loading" | "ready" | "error";
@@ -34,9 +64,9 @@ type TelegramSafeStatus = {
 
 type FormState = {
   enabled: boolean;
-  kinds: Record<NotificationKind, boolean>;
   contextTokensThreshold: string;
   channels: Record<NotificationChannel, boolean>;
+  channelEvents: NotificationChannelEventSelections;
 };
 
 const DEFAULT_TELEGRAM_STATUS: TelegramSafeStatus = {
@@ -44,30 +74,77 @@ const DEFAULT_TELEGRAM_STATUS: TelegramSafeStatus = {
   botTokenConfigured: false,
 };
 
-function createKindState(kinds: NotificationKind[]): Record<NotificationKind, boolean> {
-  const selected = new Set(kinds);
-  return {
-    question: selected.has("question"),
-    permission: selected.has("permission"),
-    task: selected.has("task"),
-    alert: selected.has("alert"),
-  };
-}
-
 function createForm(settings: NotificationSettings): FormState {
   const normalized = normalizeGlobalNotificationSettings(settings);
   const rule = getGlobalNotificationRule(normalized);
 
   return {
     enabled: normalized.enabled,
-    kinds: createKindState(rule?.kinds ?? ["question", "permission", "task", "alert"]),
     contextTokensThreshold: String(normalized.defaults.contextTokensThreshold),
     channels: { ...(rule?.channels ?? normalized.channels) },
+    channelEvents: normalizeChannelEventSelections(normalized.channelEvents),
   };
 }
 
-function selectedKinds(kinds: Record<NotificationKind, boolean>): NotificationKind[] {
-  return KIND_OPTIONS.map((option) => option.kind).filter((kind) => kinds[kind]);
+function hasEvent(channelEvents: NotificationChannelEventSelections, channel: NotificationChannel, event: NotificationEventKey): boolean {
+  return channelEvents[channel].includes(event);
+}
+
+function areAllEventsSelected(
+  channelEvents: NotificationChannelEventSelections,
+  channel: NotificationChannel,
+  events: NotificationEventKey[],
+): boolean {
+  return events.every((event) => hasEvent(channelEvents, channel, event));
+}
+
+function toggleEventGroup(
+  channelEvents: NotificationChannelEventSelections,
+  channel: NotificationChannel,
+  events: NotificationEventKey[],
+  checked: boolean,
+): NotificationChannelEventSelections {
+  const current = new Set(channelEvents[channel]);
+  for (const event of events) {
+    if (checked) {
+      current.add(event);
+    } else {
+      current.delete(event);
+    }
+  }
+
+  return normalizeChannelEventSelections({
+    ...channelEvents,
+    [channel]: ALL_NOTIFICATION_EVENT_KEYS.filter((key) => current.has(key)),
+  });
+}
+
+function selectedKindsFromEvents(channelEvents: NotificationChannelEventSelections): NotificationKind[] {
+  const selected = new Set<NotificationKind>();
+
+  for (const event of ALL_NOTIFICATION_EVENT_KEYS) {
+    const enabledInAnyChannel = CHANNEL_OPTIONS.some((option) => channelEvents[option.channel].includes(event));
+    if (!enabledInAnyChannel) {
+      continue;
+    }
+
+    if (event.startsWith("question.")) {
+      selected.add("question");
+      continue;
+    }
+    if (event.startsWith("permission.")) {
+      selected.add("permission");
+      continue;
+    }
+    if (event.startsWith("task.")) {
+      selected.add("task");
+      continue;
+    }
+    selected.add("alert");
+  }
+
+  const kinds = ALL_NOTIFICATION_KINDS.filter((kind) => selected.has(kind));
+  return kinds.length > 0 ? kinds : [...ALL_NOTIFICATION_KINDS];
 }
 
 function parseThreshold(value: string): number | null {
@@ -176,10 +253,13 @@ export function GlobalNotificationSettingsPanel() {
     };
   }, []);
 
-  const activeKinds = useMemo(() => selectedKinds(form?.kinds ?? createKindState([])), [form?.kinds]);
+  const activeKinds = useMemo(
+    () => selectedKindsFromEvents(form?.channelEvents ?? normalizeChannelEventSelections(undefined)),
+    [form?.channelEvents],
+  );
   const threshold = form?.contextTokensThreshold ?? "";
   const parsedThreshold = parseThreshold(threshold);
-  const canSave = Boolean(settings && form && parsedThreshold && activeKinds.length > 0 && saveState !== "saving");
+  const canSave = Boolean(settings && form && parsedThreshold && saveState !== "saving");
 
   const telegramStatusLabel = useMemo(() => {
     if (telegramTestState === "sent") {
@@ -195,14 +275,6 @@ export function GlobalNotificationSettingsPanel() {
 
   function updateEnabled(enabled: boolean) {
     setForm((current) => current ? { ...current, enabled } : current);
-    setSaveState("idle");
-  }
-
-  function updateKind(kind: NotificationKind, checked: boolean) {
-    setForm((current) => current ? {
-      ...current,
-      kinds: { ...current.kinds, [kind]: checked },
-    } : current);
     setSaveState("idle");
   }
 
@@ -240,6 +312,7 @@ export function GlobalNotificationSettingsPanel() {
         kinds: activeKinds,
         contextTokensThreshold: parsedThreshold,
         channels: form.channels,
+        channelEvents: normalizeChannelEventSelections(form.channelEvents),
       });
 
       const response = await fetch("/api/notification-settings", {
@@ -349,20 +422,25 @@ export function GlobalNotificationSettingsPanel() {
           </label>
 
           <fieldset className="space-y-2">
-            <legend className="text-xs font-medium text-zinc-700 dark:text-zinc-200">Notification kinds</legend>
+            <legend className="text-xs font-medium text-zinc-700 dark:text-zinc-200">Channels</legend>
             <div className="grid gap-2 sm:grid-cols-2">
-              {KIND_OPTIONS.map((option) => (
-                <label key={option.kind} className="inline-flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+              {CHANNEL_OPTIONS.map((option) => (
+                <label key={option.channel} className="inline-flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
                   <input
                     type="checkbox"
-                    checked={form.kinds[option.kind]}
-                    onChange={(event) => updateKind(option.kind, event.target.checked)}
-                    className="h-4 w-4 rounded border-zinc-300"
+                    checked={form.channels[option.channel]}
+                    disabled={option.channel === "telegram" && !telegramStatus.configured}
+                    onChange={(event) => updateChannel(option.channel, event.target.checked)}
+                    className="h-4 w-4 rounded border-zinc-300 disabled:opacity-60"
                   />
-                  {option.label}
+                  <span>{option.label}</span>
                 </label>
               ))}
             </div>
+            {!telegramStatus.configured ? (
+              <p className="text-xs text-zinc-500">Configure Telegram first.</p>
+            ) : null}
+            <p className="text-xs text-zinc-500">macOS delivery works only on macOS while pnpm notify is running.</p>
           </fieldset>
 
           <label className="flex flex-wrap items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
@@ -381,43 +459,68 @@ export function GlobalNotificationSettingsPanel() {
           </label>
 
           <fieldset className="space-y-2">
-            <legend className="text-xs font-medium text-zinc-700 dark:text-zinc-200">Channels</legend>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {CHANNEL_OPTIONS.map((option) => (
-                <label key={option.channel} className="inline-flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
-                  <input
-                    type="checkbox"
-                    checked={form.channels[option.channel]}
-                    disabled={option.disabled}
-                    onChange={(event) => updateChannel(option.channel, event.target.checked)}
-                    className="h-4 w-4 rounded border-zinc-300 disabled:opacity-60"
-                  />
-                  <span>{option.label}</span>
-                </label>
-              ))}
-              <label className="inline-flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300">
-                <input
-                  type="checkbox"
-                  checked={form.channels.telegram}
-                  disabled={!telegramStatus.configured}
-                  onChange={(event) => updateChannel("telegram", event.target.checked)}
-                  className="h-4 w-4 rounded border-zinc-300 disabled:opacity-60"
-                />
-                <span>Telegram review/questions</span>
-              </label>
+            <legend className="text-xs font-medium text-zinc-700 dark:text-zinc-200">Notification delivery</legend>
+            <p className="text-xs text-zinc-500">Choose which events are delivered to each channel.</p>
+            <p className="text-xs text-zinc-500">AI provider/API errors are sent by default because work may be blocked.</p>
+            <div className="overflow-x-auto rounded border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950/40">
+              <table className="min-w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-200 bg-zinc-50 text-left dark:border-zinc-800 dark:bg-zinc-900/40">
+                    <th className="px-3 py-2 font-medium text-zinc-700 dark:text-zinc-200">Event group</th>
+                    {CHANNEL_OPTIONS.map((option) => (
+                      <th key={option.channel} className="px-3 py-2 text-center font-medium text-zinc-700 dark:text-zinc-200">{option.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {DELIVERY_ROWS.map((row) => (
+                    <tr key={row.id} className="border-b border-zinc-100 last:border-b-0 dark:border-zinc-800/80">
+                      <td className="px-3 py-2 align-top">
+                        <div className="font-medium text-zinc-700 dark:text-zinc-200">{row.label}</div>
+                        <div className="text-zinc-500 dark:text-zinc-400">{row.description}</div>
+                      </td>
+                      {CHANNEL_OPTIONS.map((option) => {
+                        const checked = areAllEventsSelected(form.channelEvents, option.channel, row.events);
+                        return (
+                          <td key={`${row.id}-${option.channel}`} className="px-3 py-2 text-center align-middle">
+                            <input
+                              type="checkbox"
+                              aria-label={`${row.label} for ${option.label}`}
+                              checked={checked}
+                              onChange={(event) => {
+                                setForm((current) => {
+                                  if (!current) {
+                                    return current;
+                                  }
+
+                                  return {
+                                    ...current,
+                                    channelEvents: toggleEventGroup(
+                                      current.channelEvents,
+                                      option.channel,
+                                      row.events,
+                                      event.target.checked,
+                                    ),
+                                  };
+                                });
+                                setSaveState("idle");
+                              }}
+                              className="h-4 w-4 rounded border-zinc-300"
+                            />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            {!telegramStatus.configured ? (
-              <p className="text-xs text-zinc-500">Configure Telegram first.</p>
-            ) : null}
-            <p className="text-xs text-zinc-500">
-              macOS native notification sends local macOS notifications for questions and tasks ready for review while pnpm notify is running. Works only on macOS and daemon mode.
-            </p>
           </fieldset>
 
           <div className="rounded border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
             <h4 className="text-xs font-semibold text-zinc-800 dark:text-zinc-100">Telegram</h4>
             <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
-              Telegram sends only when Claude asks a question or a task is ready for review. Permission/tool requests stay in the in-app drawer.
+              Telegram delivery requires bot setup and follows your event matrix selection for the Telegram channel.
             </p>
             <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs text-zinc-600 dark:text-zinc-300">
               <li>Create a bot with BotFather.</li>

@@ -6,6 +6,7 @@ import {
   normalizeGlobalNotificationSettings,
   updateGlobalNotificationSettings,
 } from "@/lib/notifications/global-settings";
+import { getDefaultChannelEventSelections } from "@/lib/notifications/events";
 import { notificationSettingsSchema, type NotificationRule, type NotificationSettings } from "@/lib/notifications/schema";
 import { getDefaultNotificationSettings } from "@/lib/notifications/settings";
 
@@ -66,6 +67,12 @@ function stringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function inputBase() {
+  return {
+    channelEvents: getDefaultChannelEventSelections(),
+  };
+}
+
 describe("global notification settings helpers", () => {
   it("getGlobalNotificationRule returns default-global first", () => {
     const fallback = globalRule({ id: "fallback-global" });
@@ -109,6 +116,7 @@ describe("global notification settings helpers", () => {
 
   it("updateGlobalNotificationSettings updates settings.enabled", () => {
     const result = updateGlobalNotificationSettings(getDefaultNotificationSettings(), {
+      ...inputBase(),
       enabled: false,
       kinds: ["question"],
       contextTokensThreshold: 500000,
@@ -120,6 +128,7 @@ describe("global notification settings helpers", () => {
 
   it("updateGlobalNotificationSettings updates defaults.contextTokensThreshold", () => {
     const result = updateGlobalNotificationSettings(getDefaultNotificationSettings(), {
+      ...inputBase(),
       enabled: true,
       kinds: ["question"],
       contextTokensThreshold: 750000,
@@ -132,6 +141,7 @@ describe("global notification settings helpers", () => {
   it("updateGlobalNotificationSettings updates settings.channels", () => {
     const channels = { inApp: true, browser: false, telegram: true, macos: false };
     const result = updateGlobalNotificationSettings(getDefaultNotificationSettings(), {
+      ...inputBase(),
       enabled: true,
       kinds: ["question"],
       contextTokensThreshold: 500000,
@@ -143,6 +153,7 @@ describe("global notification settings helpers", () => {
 
   it("updateGlobalNotificationSettings updates default-global kinds", () => {
     const result = updateGlobalNotificationSettings(getDefaultNotificationSettings(), {
+      ...inputBase(),
       enabled: true,
       kinds: ["permission", "alert"],
       contextTokensThreshold: 500000,
@@ -154,6 +165,7 @@ describe("global notification settings helpers", () => {
 
   it("updateGlobalNotificationSettings updates default-global thresholds.contextTokens", () => {
     const result = updateGlobalNotificationSettings(getDefaultNotificationSettings(), {
+      ...inputBase(),
       enabled: true,
       kinds: ["alert"],
       contextTokensThreshold: 820000,
@@ -166,6 +178,7 @@ describe("global notification settings helpers", () => {
   it("updateGlobalNotificationSettings updates default-global channels", () => {
     const channels = { inApp: false, browser: true, telegram: true, macos: false };
     const result = updateGlobalNotificationSettings(getDefaultNotificationSettings(), {
+      ...inputBase(),
       enabled: true,
       kinds: ["task"],
       contextTokensThreshold: 500000,
@@ -177,6 +190,7 @@ describe("global notification settings helpers", () => {
 
   it("helper-generated settings parse with notificationSettingsSchema", () => {
     const updated = updateGlobalNotificationSettings(settingsWithRules([projectRule(), sessionRule()]), {
+      ...inputBase(),
       enabled: true,
       kinds: ["question", "task"],
       contextTokensThreshold: 650000,
@@ -220,6 +234,7 @@ describe("global notification settings helpers", () => {
       },
     });
     const result = updateGlobalNotificationSettings(input, {
+      ...inputBase(),
       enabled: true,
       kinds: ["alert"],
       contextTokensThreshold: 910000,
@@ -232,6 +247,7 @@ describe("global notification settings helpers", () => {
 
   it("no mainSessionInputTokens field is written", () => {
     const result = updateGlobalNotificationSettings(getDefaultNotificationSettings(), {
+      ...inputBase(),
       enabled: true,
       kinds: ["alert"],
       contextTokensThreshold: 910000,
@@ -243,6 +259,7 @@ describe("global notification settings helpers", () => {
 
   it("no telegramBotToken or secret-looking field is written", () => {
     const result = updateGlobalNotificationSettings(getDefaultNotificationSettings(), {
+      ...inputBase(),
       enabled: true,
       kinds: ["question"],
       contextTokensThreshold: 500000,
