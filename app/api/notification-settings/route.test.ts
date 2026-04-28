@@ -7,6 +7,7 @@ import { getDefaultNotificationSettings, getNotificationSettingsPath } from "@/l
 import type { NotificationSettings } from "@/lib/notifications/schema";
 
 const originalConfigDir = process.env.AIPANEL_CONFIG_DIR;
+const originalWriteToken = process.env.AIPANEL_WRITE_TOKEN;
 
 async function withTempConfigDir(run: (configDir: string) => Promise<void>) {
   const configDir = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-notification-api-"));
@@ -29,19 +30,27 @@ async function writeSettingsFile(configDir: string, content: string) {
   await fs.writeFile(getNotificationSettingsPath(), content, "utf8");
 }
 
-function settingsRequest(body: unknown) {
+function settingsRequest(body: unknown, headers: HeadersInit = {}) {
   return new Request("http://localhost/api/notification-settings", {
     method: "PUT",
     body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Origin: "http://localhost",
+      ...headers,
+    },
   });
 }
 
-function rawRequest(body: string) {
+function rawRequest(body: string, headers: HeadersInit = {}) {
   return new Request("http://localhost/api/notification-settings", {
     method: "PUT",
     body,
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Origin: "http://localhost",
+      ...headers,
+    },
   });
 }
 
@@ -58,6 +67,12 @@ afterEach(() => {
     process.env.AIPANEL_CONFIG_DIR = originalConfigDir;
   } else {
     delete process.env.AIPANEL_CONFIG_DIR;
+  }
+
+  if (originalWriteToken !== undefined) {
+    process.env.AIPANEL_WRITE_TOKEN = originalWriteToken;
+  } else {
+    delete process.env.AIPANEL_WRITE_TOKEN;
   }
 });
 
@@ -143,6 +158,61 @@ describe("PUT /api/notification-settings", () => {
       expect(response.status).toBe(400);
       expect(body).toEqual({ error: "Invalid notification settings" });
       expectSanitized(body, configDir);
+    });
+  });
+
+  it("rejects unknown cross-origin requests with 403", async () => {
+    await withTempConfigDir(async (configDir) => {
+      const response = await PUT(
+        settingsRequest(getDefaultNotificationSettings(), {
+          Origin: "https://evil.example",
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body).toEqual({ error: "Forbidden" });
+      expectSanitized(body, configDir);
+    });
+  });
+
+  it("rejects non-json content type with 415", async () => {
+    await withTempConfigDir(async (configDir) => {
+      const response = await PUT(
+        new Request("http://localhost/api/notification-settings", {
+          method: "PUT",
+          body: JSON.stringify(getDefaultNotificationSettings()),
+          headers: {
+            Origin: "http://localhost",
+            "Content-Type": "text/plain",
+          },
+        }),
+      );
+      const body = await response.json();
+
+      expect(response.status).toBe(415);
+      expect(body).toEqual({ error: "Unsupported Media Type" });
+      expectSanitized(body, configDir);
+    });
+  });
+
+  it("requires write token when configured", async () => {
+    await withTempConfigDir(async (configDir) => {
+      process.env.AIPANEL_WRITE_TOKEN = "secret-write-token";
+
+      const denied = await PUT(settingsRequest(getDefaultNotificationSettings()));
+      const deniedBody = await denied.json();
+
+      expect(denied.status).toBe(401);
+      expect(deniedBody).toEqual({ error: "Unauthorized" });
+      expectSanitized(deniedBody, configDir);
+
+      const allowed = await PUT(
+        settingsRequest(getDefaultNotificationSettings(), {
+          "x-aipanel-write-token": "secret-write-token",
+        }),
+      );
+      expect(allowed.status).toBe(200);
     });
   });
 });

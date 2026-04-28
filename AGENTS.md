@@ -48,6 +48,8 @@ For small documentation-only edits, `pnpm typecheck` is usually enough unless su
 - Daemon sends only human-intervention events (Claude question + task ready for review) for Telegram/macOS channels.
 - Daemon must not send permission/tool/Bash/context-threshold alert events to Telegram/macOS channels.
 - Keep Telegram bot tokens server-side only.
+- Apply local write guard to new writable settings/secrets API routes.
+- Never expose `AIPANEL_WRITE_TOKEN` or Telegram bot token in responses/logs.
 - Unit tests for macOS channel must use runner injection/mocks and must not invoke real `osascript`.
 - If macOS channel is disabled or platform is non-darwin, dispatcher should skip safely.
 - Do not store secrets in `localStorage`, client React state, `NEXT_PUBLIC_*` env vars, or repository-tracked files.

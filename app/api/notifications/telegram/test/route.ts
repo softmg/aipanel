@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sendTelegramNotification } from "@/lib/notifications/channels/telegram";
 import { loadNotificationSecrets } from "@/lib/notifications/secrets";
+import { guardLocalWrite } from "@/lib/api/local-write-guard";
 import type { ClaudeNotification } from "@/lib/sources/claude-code/types";
 
 function badRequest(message: string) {
@@ -32,7 +33,12 @@ function createTestNotification(): ClaudeNotification {
   };
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  const denied = guardLocalWrite(request);
+  if (denied) {
+    return denied;
+  }
+
   let secrets: Awaited<ReturnType<typeof loadNotificationSecrets>>;
 
   try {

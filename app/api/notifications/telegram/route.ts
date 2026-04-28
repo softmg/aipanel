@@ -5,6 +5,7 @@ import {
   loadNotificationSecrets,
   saveNotificationSecrets,
 } from "@/lib/notifications/secrets";
+import { guardLocalWrite } from "@/lib/api/local-write-guard";
 
 const putTelegramSchema = z
   .object({
@@ -31,6 +32,11 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  const denied = guardLocalWrite(request, { requireJson: true });
+  if (denied) {
+    return denied;
+  }
+
   let body: unknown;
 
   try {

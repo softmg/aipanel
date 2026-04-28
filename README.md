@@ -141,6 +141,38 @@ AIPANEL_ALLOWED_DEV_ORIGINS=localhost,100.89.42.77 make dev
 AIPANEL_ALLOWED_DEV_ORIGINS=localhost,100.89.42.77
 ```
 
+## Guard для write API (security)
+
+Mutating endpoints (`POST`, `PUT`, `PATCH`, `DELETE`) for notification/settings flows are protected by local write guard:
+- same-origin / loopback (`localhost`, `127.0.0.1`, `::1`) requests are allowed;
+- unknown cross-origin requests are rejected;
+- `Sec-Fetch-Site: cross-site` is rejected;
+- JSON write routes require `Content-Type: application/json`.
+
+Optional stricter protection:
+
+```bash
+AIPANEL_WRITE_TOKEN=your-local-secret
+```
+
+When set, write requests must include:
+
+```bash
+x-aipanel-write-token: your-local-secret
+```
+
+Do not use `NEXT_PUBLIC_AIPANEL_WRITE_TOKEN`.
+
+curl example:
+
+```bash
+curl -X PUT "http://localhost:3000/api/notification-settings" \
+  -H "content-type: application/json" \
+  -H "origin: http://localhost:3000" \
+  -H "x-aipanel-write-token: $AIPANEL_WRITE_TOKEN" \
+  -d '{"enabled":true,"channels":{"browser":true,"telegram":false,"macos":false},"defaults":{"contextTokensThreshold":1000000,"contextPercentageThreshold":80},"rules":[]}'
+```
+
 ## Browser desktop alerts (во вкладке)
 
 Realtime-обновления и browser desktop alerts включены по умолчанию. В интерфейсе нажмите `Enable desktop alerts` и подтвердите permission в браузере.

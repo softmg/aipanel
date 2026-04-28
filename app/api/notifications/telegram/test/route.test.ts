@@ -11,6 +11,7 @@ vi.mock("@/lib/notifications/channels/telegram", () => ({
 
 const telegramChannel = vi.mocked(await import("@/lib/notifications/channels/telegram"));
 const originalConfigDir = process.env.AIPANEL_CONFIG_DIR;
+const originalWriteToken = process.env.AIPANEL_WRITE_TOKEN;
 
 async function withTempConfigDir(run: (configDir: string) => Promise<void>) {
   const configDir = await fs.mkdtemp(path.join(os.tmpdir(), "aipanel-telegram-test-api-"));
@@ -33,6 +34,16 @@ async function writeSecrets(configDir: string, content: unknown) {
   await fs.writeFile(getNotificationSecretsPath(), `${JSON.stringify(content, null, 2)}\n`, "utf8");
 }
 
+function request(headers: HeadersInit = {}) {
+  return new Request("http://localhost/api/notifications/telegram/test", {
+    method: "POST",
+    headers: {
+      Origin: "http://localhost",
+      ...headers,
+    },
+  });
+}
+
 function expectSanitized(body: unknown, configDir: string) {
   const raw = JSON.stringify(body);
   expect(raw).not.toContain("telegramBotToken");
@@ -49,18 +60,55 @@ afterEach(() => {
   } else {
     delete process.env.AIPANEL_CONFIG_DIR;
   }
+
+  if (originalWriteToken !== undefined) {
+    process.env.AIPANEL_WRITE_TOKEN = originalWriteToken;
+  } else {
+    delete process.env.AIPANEL_WRITE_TOKEN;
+  }
 });
 
 describe("POST /api/notifications/telegram/test", () => {
   it("returns 400 when configuration is missing", async () => {
     await withTempConfigDir(async (configDir) => {
-      const response = await POST();
+      const response = await POST(request());
       const body = await response.json();
 
       expect(response.status).toBe(400);
       expect(body).toEqual({ error: "Telegram is not configured" });
       expectSanitized(body, configDir);
       expect(telegramChannel.sendTelegramNotification).not.toHaveBeenCalled();
+    });
+  });
+
+  it("rejects unknown cross-origin requests with 403", async () => {
+    await withTempConfigDir(async (configDir) => {
+      const response = await POST(request({ Origin: "https://evil.example" }));
+      const body = await response.json();
+
+      expect(response.status).toBe(403);
+      expect(body).toEqual({ error: "Forbidden" });
+      expectSanitized(body, configDir);
+      expect(telegramChannel.sendTelegramNotification).not.toHaveBeenCalled();
+    });
+  });
+
+  it("requires write token when configured", async () => {
+    await withTempConfigDir(async (configDir) => {
+      process.env.AIPANEL_WRITE_TOKEN = "secret-write-token";
+
+      const denied = await POST(request());
+      const deniedBody = await denied.json();
+
+      expect(denied.status).toBe(401);
+      expect(deniedBody).toEqual({ error: "Unauthorized" });
+      expectSanitized(deniedBody, configDir);
+      expect(telegramChannel.sendTelegramNotification).not.toHaveBeenCalled();
+
+      const allowed = await POST(
+        request({ "x-aipanel-write-token": "secret-write-token" }),
+      );
+      expect(allowed.status).toBe(400);
     });
   });
 
@@ -72,7 +120,7 @@ describe("POST /api/notifications/telegram/test", () => {
       });
       telegramChannel.sendTelegramNotification.mockResolvedValue();
 
-      const response = await POST();
+      const response = await POST(request());
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -104,7 +152,7 @@ describe("POST /api/notifications/telegram/test", () => {
         new Error("Telegram notification request failed (401): bad token 123456:secret-token"),
       );
 
-      const response = await POST();
+      const response = await POST(request());
       const body = await response.json();
 
       expect(response.status).toBe(502);

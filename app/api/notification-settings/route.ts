@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { notificationSettingsSchema } from "@/lib/notifications/schema";
 import { loadNotificationSettings, saveNotificationSettings } from "@/lib/notifications/settings";
+import { guardLocalWrite } from "@/lib/api/local-write-guard";
 
 function badRequest(message: string) {
   return NextResponse.json({ error: message }, { status: 400 });
@@ -12,6 +13,11 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
+  const denied = guardLocalWrite(request, { requireJson: true });
+  if (denied) {
+    return denied;
+  }
+
   let body: unknown;
 
   try {
