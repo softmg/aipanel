@@ -178,6 +178,32 @@ describe("dispatchTelegramTaskCompletionNotifications", () => {
     });
   });
 
+  it("dedupes semantically identical task completions with different ids within 5 seconds", async () => {
+    await withTempConfigDir(async (configDir) => {
+      await setupEnabledTelegram(configDir);
+      const sender = vi.fn().mockResolvedValue(undefined);
+
+      const first = createNotification({ id: "task-1", createdAt: "2026-04-29T16:00:00.000Z" });
+      const second = createNotification({ id: "task-2", createdAt: "2026-04-29T16:00:04.000Z" });
+
+      const firstSummary = await dispatchTelegramTaskCompletionNotifications([first], {
+        configDir,
+        sender,
+        now: new Date("2026-04-29T16:00:00.000Z"),
+      });
+      const secondSummary = await dispatchTelegramTaskCompletionNotifications([second], {
+        configDir,
+        sender,
+        now: new Date("2026-04-29T16:00:04.000Z"),
+      });
+
+      expect(sender).toHaveBeenCalledTimes(1);
+      expect(firstSummary.sent).toBe(1);
+      expect(secondSummary.sent).toBe(0);
+      expect(secondSummary.skipped).toBe(1);
+    });
+  });
+
   it("records failure and continues on sender error", async () => {
     await withTempConfigDir(async (configDir) => {
       await setupEnabledTelegram(configDir);

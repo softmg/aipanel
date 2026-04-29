@@ -100,6 +100,42 @@ describe("dispatchTelegramHumanInterventionNotifications", () => {
     });
   });
 
+  it("dedupes semantically identical notifications with different ids within 5 seconds", async () => {
+    await withTempConfigDir(async (configDir) => {
+      await setupEnabledTelegram(configDir);
+      const sender = vi.fn().mockResolvedValue(undefined);
+
+      const first = createNotification({
+        id: "ready-1",
+        createdAt: "2026-04-29T16:00:00.000Z",
+        title: "Task ready for review",
+        details: "Assistant finished responding: pong",
+      });
+      const second = createNotification({
+        id: "ready-2",
+        createdAt: "2026-04-29T16:00:04.000Z",
+        title: "Task ready for review",
+        details: "Assistant finished responding: pong",
+      });
+
+      const firstSummary = await dispatchTelegramHumanInterventionNotifications([first], {
+        configDir,
+        sender,
+        now: new Date("2026-04-29T16:00:00.000Z"),
+      });
+      const secondSummary = await dispatchTelegramHumanInterventionNotifications([second], {
+        configDir,
+        sender,
+        now: new Date("2026-04-29T16:00:04.000Z"),
+      });
+
+      expect(sender).toHaveBeenCalledTimes(1);
+      expect(firstSummary.sent).toBe(1);
+      expect(secondSummary.sent).toBe(0);
+      expect(secondSummary.skipped).toBe(1);
+    });
+  });
+
   it("dedupes existing legacy task-completion delivery log rows", async () => {
     await withTempConfigDir(async (configDir) => {
       await setupEnabledTelegram(configDir);

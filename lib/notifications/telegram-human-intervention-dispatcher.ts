@@ -2,7 +2,10 @@ import { getGlobalNotificationRule } from "@/lib/notifications/global-settings";
 import { isNotificationSelectedForChannel } from "@/lib/notifications/events";
 import { sendTelegramNotification, type TelegramNotificationConfig } from "@/lib/notifications/channels/telegram";
 import {
+  EXTERNAL_NOTIFICATION_DEDUPE_WINDOW_MS,
+  hasRecentSuccessfulSemanticDelivery,
   hasSuccessfulDelivery,
+  makeSemanticDeliveryKey,
   recordDeliveryAttempt,
   recordDeliveryFailure,
   recordDeliverySuccess,
@@ -40,6 +43,18 @@ function createSummary(): TelegramHumanInterventionDispatchSummary {
   };
 }
 
+function makeNotificationSemanticKey(notification: ClaudeNotification): string {
+  return makeSemanticDeliveryKey({
+    channel: "telegram",
+    projectSlug: notification.projectSlug,
+    sessionId: notification.sessionId,
+    kind: notification.kind,
+    status: notification.status,
+    title: notification.title,
+    details: notification.details,
+  });
+}
+
 function buildDeliveryInput(
   notification: ClaudeNotification,
   options: TelegramHumanInterventionDispatcherOptions,
@@ -51,6 +66,7 @@ function buildDeliveryInput(
     projectSlug: notification.projectSlug,
     sessionId: notification.sessionId,
     ruleId,
+    semanticKey: makeNotificationSemanticKey(notification),
     now: options.now,
   };
 }
@@ -59,13 +75,25 @@ function wasAlreadyDelivered(
   notification: ClaudeNotification,
   options: TelegramHumanInterventionDispatcherOptions,
 ): boolean {
-  if (hasSuccessfulDelivery(buildDeliveryInput(notification, options), { configDir: options.configDir })) {
+  const deliveryInput = buildDeliveryInput(notification, options);
+  if (hasSuccessfulDelivery(deliveryInput, { configDir: options.configDir })) {
     return true;
   }
 
-  return hasSuccessfulDelivery(buildDeliveryInput(notification, options, LEGACY_TASK_COMPLETION_RULE_ID), {
+  if (hasSuccessfulDelivery(buildDeliveryInput(notification, options, LEGACY_TASK_COMPLETION_RULE_ID), {
     configDir: options.configDir,
-  });
+  })) {
+    return true;
+  }
+
+  return hasRecentSuccessfulSemanticDelivery(
+    {
+      semanticKey: deliveryInput.semanticKey ?? "",
+      now: options.now,
+      windowMs: EXTERNAL_NOTIFICATION_DEDUPE_WINDOW_MS,
+    },
+    { configDir: options.configDir },
+  );
 }
 
 export async function dispatchTelegramHumanInterventionNotifications(

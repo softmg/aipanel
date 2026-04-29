@@ -112,6 +112,42 @@ describe("dispatchMacOSHumanInterventionNotifications", () => {
     });
   });
 
+  it("dedupes semantically identical notifications with different ids within 5 seconds", async () => {
+    await withTempConfigDir(async (configDir) => {
+      await setupEnabledMacOS(configDir);
+      const sender = vi.fn().mockResolvedValue({ ok: true });
+
+      const first = createNotification({
+        id: "ready-1",
+        createdAt: "2026-04-29T16:00:00.000Z",
+        title: "Task ready for review",
+        details: "Assistant finished responding: pong",
+      });
+      const second = createNotification({
+        id: "ready-2",
+        createdAt: "2026-04-29T16:00:04.000Z",
+        title: "Task ready for review",
+        details: "Assistant finished responding: pong",
+      });
+
+      const firstSummary = await dispatchMacOSHumanInterventionNotifications([first], {
+        configDir,
+        sender,
+        now: new Date("2026-04-29T16:00:00.000Z"),
+      });
+      const secondSummary = await dispatchMacOSHumanInterventionNotifications([second], {
+        configDir,
+        sender,
+        now: new Date("2026-04-29T16:00:04.000Z"),
+      });
+
+      expect(sender).toHaveBeenCalledTimes(1);
+      expect(firstSummary.sent).toBe(1);
+      expect(secondSummary.sent).toBe(0);
+      expect(secondSummary.skipped).toBe(1);
+    });
+  });
+
   it("keeps Telegram and macOS dedupe keys independent", async () => {
     await withTempConfigDir(async (configDir) => {
       await setupEnabledMacOS(configDir);

@@ -4,7 +4,10 @@ import {
   type MacOSNotificationResult,
 } from "@/lib/notifications/channels/macos";
 import {
+  EXTERNAL_NOTIFICATION_DEDUPE_WINDOW_MS,
+  hasRecentSuccessfulSemanticDelivery,
   hasSuccessfulDelivery,
+  makeSemanticDeliveryKey,
   recordDeliveryAttempt,
   recordDeliveryFailure,
   recordDeliverySuccess,
@@ -43,6 +46,18 @@ function createSummary(): MacOSHumanInterventionDispatchSummary {
   };
 }
 
+function makeNotificationSemanticKey(notification: ClaudeNotification): string {
+  return makeSemanticDeliveryKey({
+    channel: "macos",
+    projectSlug: notification.projectSlug,
+    sessionId: notification.sessionId,
+    kind: notification.kind,
+    status: notification.status,
+    title: notification.title,
+    details: notification.details,
+  });
+}
+
 function buildDeliveryInput(
   notification: ClaudeNotification,
   options: MacOSHumanInterventionDispatcherOptions,
@@ -53,6 +68,7 @@ function buildDeliveryInput(
     projectSlug: notification.projectSlug,
     sessionId: notification.sessionId,
     ruleId: options.ruleId ?? DEFAULT_RULE_ID,
+    semanticKey: makeNotificationSemanticKey(notification),
     now: options.now,
   };
 }
@@ -88,7 +104,17 @@ export async function dispatchMacOSHumanInterventionNotifications(
     summary.eligible += 1;
 
     const deliveryInput = buildDeliveryInput(notification, options);
-    if (hasSuccessfulDelivery(deliveryInput, { configDir: options.configDir })) {
+    if (
+      hasSuccessfulDelivery(deliveryInput, { configDir: options.configDir }) ||
+      hasRecentSuccessfulSemanticDelivery(
+        {
+          semanticKey: deliveryInput.semanticKey ?? "",
+          now: options.now,
+          windowMs: EXTERNAL_NOTIFICATION_DEDUPE_WINDOW_MS,
+        },
+        { configDir: options.configDir },
+      )
+    ) {
       summary.skipped += 1;
       continue;
     }

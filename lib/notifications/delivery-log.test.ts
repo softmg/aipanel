@@ -4,9 +4,12 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import {
+  EXTERNAL_NOTIFICATION_DEDUPE_WINDOW_MS,
   getNotificationDeliveryLogPath,
+  hasRecentSuccessfulSemanticDelivery,
   hasSuccessfulDelivery,
   makeDeliveryKey,
+  makeSemanticDeliveryKey,
   recordDeliveryAttempt,
   recordDeliveryFailure,
   recordDeliverySuccess,
@@ -18,6 +21,8 @@ type DeliveryInput = {
   projectSlug?: string;
   sessionId?: string;
   ruleId?: string;
+  semanticKey?: string;
+  now?: Date;
 };
 
 async function withTempConfigDir(run: (configDir: string) => Promise<void>) {
@@ -37,6 +42,15 @@ function baseInput(overrides: Partial<DeliveryInput> = {}): DeliveryInput {
     projectSlug: "aipanel",
     sessionId: "session-1",
     ruleId: "task-completion",
+    semanticKey: makeSemanticDeliveryKey({
+      channel: "telegram",
+      projectSlug: "aipanel",
+      sessionId: "session-1",
+      kind: "task",
+      status: "completed",
+      title: "Build finished",
+      details: "Status: completed",
+    }),
     ...overrides,
   };
 }
@@ -93,6 +107,46 @@ describe("notification delivery log", () => {
     expect(makeDeliveryKey(baseInput({ sessionId: "session-2" }))).not.toBe(base);
     expect(makeDeliveryKey(baseInput({ channel: "macos" }))).not.toBe(base);
     expect(makeDeliveryKey(baseInput({ ruleId: "other-rule" }))).not.toBe(base);
+  });
+
+  it("recent semantic success is detected within the 5-second window", async () => {
+    await withTempConfigDir(async (configDir) => {
+      const now = new Date("2026-04-29T16:00:00.000Z");
+      const input = baseInput({ now });
+      recordDeliveryAttempt(input, { configDir });
+      recordDeliverySuccess(input, { configDir });
+
+      expect(
+        hasRecentSuccessfulSemanticDelivery(
+          {
+            semanticKey: input.semanticKey ?? "",
+            now: new Date(now.getTime() + EXTERNAL_NOTIFICATION_DEDUPE_WINDOW_MS - 1),
+            windowMs: EXTERNAL_NOTIFICATION_DEDUPE_WINDOW_MS,
+          },
+          { configDir },
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it("recent semantic success expires after the 5-second window", async () => {
+    await withTempConfigDir(async (configDir) => {
+      const now = new Date("2026-04-29T16:00:00.000Z");
+      const input = baseInput({ now });
+      recordDeliveryAttempt(input, { configDir });
+      recordDeliverySuccess(input, { configDir });
+
+      expect(
+        hasRecentSuccessfulSemanticDelivery(
+          {
+            semanticKey: input.semanticKey ?? "",
+            now: new Date(now.getTime() + EXTERNAL_NOTIFICATION_DEDUPE_WINDOW_MS + 1),
+            windowMs: EXTERNAL_NOTIFICATION_DEDUPE_WINDOW_MS,
+          },
+          { configDir },
+        ),
+      ).toBe(false);
+    });
   });
 
   it("stored error is sanitized and does not store token", async () => {
